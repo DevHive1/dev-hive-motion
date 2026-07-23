@@ -392,21 +392,23 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
               title="Selection Tool (V)"
               onClick={() => setActiveTool("select")}
             >
-              ↖
+              <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"><path d="M2 2h1v7L8 5.5V9l4-4-4-4v3.5L3 1H2V2z"/></svg>
             </button>
             <button
               className={`tool-btn ${activeTool === "razor" ? "active" : ""}`}
               title="Razor Cut Tool (C)"
               onClick={() => setActiveTool("razor")}
             >
-              ✂ Razor
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor"><path d="M2 10.5c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zm6-7c0-1.1.9-2 2-2s2 .9 2 2-.9 2-2 2-2-.9-2-2zM4.5 9l8-8M9.5 9l-8-8" stroke="currentColor" strokeWidth="1.4" fill="none" strokeLinecap="round"/></svg>
+              Razor
             </button>
             <button
               className="tool-btn"
               title="Split Element at Playhead (S)"
               onClick={handleSplitAtPlayhead}
             >
-              ✂ Split
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor"><rect x="1" y="6" width="5" height="2" rx="1"/><rect x="8" y="6" width="5" height="2" rx="1"/><line x1="7" y1="1" x2="7" y2="13" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"/></svg>
+              Split
             </button>
           </div>
 
@@ -417,14 +419,16 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
               title="Toggle Snapping (S)"
               onClick={() => setIsSnapEnabled(!isSnapEnabled)}
             >
-              🧲 Snap
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor"><path d="M7 1v4M7 9v4M1 7h4M9 7h4" stroke="currentColor" strokeWidth="1.5" fill="none" strokeLinecap="round"/><circle cx="7" cy="7" r="2" fill="currentColor"/></svg>
+              Snap
             </button>
             <button
               className={`tool-btn ${isRippleEdit ? "active" : ""}`}
               title="Ripple Edit Mode"
               onClick={() => setIsRippleEdit(!isRippleEdit)}
             >
-              🌊 Ripple
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><path d="M1 9c1-2 2-2 3 0s2 2 3 0 2-2 3 0"/><path d="M1 5c1-2 2-2 3 0s2 2 3 0 2-2 3 0"/></svg>
+              Ripple
             </button>
           </div>
 
@@ -439,7 +443,7 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
                 playerRef?.current?.seekTo(prev);
               }}
             >
-              ⏮
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor"><rect x="1" y="2" width="2" height="10" rx="1"/><path d="M5 7L13 2v10L5 7z"/></svg>
             </button>
             <button
               className={`tool-btn play-btn ${isPlaying ? "playing" : ""}`}
@@ -456,7 +460,9 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
                 }
               }}
             >
-              {isPlaying ? "⏸" : "▶"}
+              {isPlaying
+                ? <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor"><rect x="2" y="2" width="4" height="10" rx="1"/><rect x="8" y="2" width="4" height="10" rx="1"/></svg>
+                : <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor"><path d="M3 2l10 5-10 5V2z"/></svg>}
             </button>
             <button
               className="tool-btn"
@@ -467,7 +473,7 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
                 playerRef?.current?.seekTo(next);
               }}
             >
-              ⏭
+              <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor"><rect x="11" y="2" width="2" height="10" rx="1"/><path d="M9 7L1 2v10L9 7z"/></svg>
             </button>
           </div>
 
@@ -486,7 +492,7 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
               title="Zoom Out"
               onClick={() => setZoomScale((z) => Math.max(0.4, z - 0.4))}
             >
-              🔍-
+              <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="4.5" cy="4.5" r="3.5"/><line x1="7.5" y1="7.5" x2="10" y2="10"/><line x1="3" y1="4.5" x2="6" y2="4.5"/></svg>
             </button>
             <input
               type="range"
@@ -502,7 +508,7 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
               title="Zoom In"
               onClick={() => setZoomScale((z) => Math.min(6.0, z + 0.4))}
             >
-              🔍+
+              <svg width="11" height="11" viewBox="0 0 11 11" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round"><circle cx="4.5" cy="4.5" r="3.5"/><line x1="7.5" y1="7.5" x2="10" y2="10"/><line x1="3" y1="4.5" x2="6" y2="4.5"/><line x1="4.5" y1="3" x2="4.5" y2="6"/></svg>
             </button>
           </div>
 
@@ -514,7 +520,7 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
               disabled={!canUndo}
               onClick={onUndo}
             >
-              ↩
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M2 7a5 5 0 105-5H4"/><path d="M2 4V7h3"/></svg>
             </button>
           )}
           {onRedo && (
@@ -524,7 +530,7 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
               disabled={!canRedo}
               onClick={onRedo}
             >
-              ↪
+              <svg width="13" height="13" viewBox="0 0 14 14" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M12 7a5 5 0 10-5-5h3"/><path d="M12 4V7H9"/></svg>
             </button>
           )}
           {onAddScene && (

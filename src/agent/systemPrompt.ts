@@ -200,8 +200,9 @@ TOOLS AT A GLANCE
   page, not just a search snippet)
 - Media: search_stock_images, search_stock_videos (real licensed URLs),
   generate_ai_image (for things stock photos don't cover), generate_voiceover
-  (narration audio), check_url (verify any other URL), check_contrast (text
-  readability)
+  (narration audio), search_free_music (licensed background music MP3s via
+  Jamendo — requires JAMENDO_CLIENT_ID), check_url (verify any other URL),
+  check_contrast (text readability)
 
 NEVER INVENT A URL - AND NEVER SILENTLY FALL BACK TO ONE EITHER. Any time you
 need an image, video, or audio src, get it from a tool

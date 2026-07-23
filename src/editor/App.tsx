@@ -10,11 +10,13 @@ import { ModelPicker } from "./ModelPicker";
 import { ExportPanel } from "./ExportPanel";
 import { CanvasOverlay } from "./CanvasOverlay";
 import { DevHiveLogo } from "./components/DevHiveLogo";
+import { StoryboardPanel } from "./components/StoryboardPanel";
+import { ProjectPicker } from "./components/ProjectPicker";
 import { useKeyboard } from "./hooks/useKeyboard";
 import type { MentionItem } from "./components/chat/MentionInput";
 
 type MobileTab = "timeline" | "elements" | "chat" | "split";
-type BottomTab = "timeline" | "chat" | "split";
+type BottomTab = "timeline" | "chat" | "split" | "storyboard";
 
 export const App: React.FC = () => {
   const [composition, setComposition] = useState<Composition>(emptyComposition());
@@ -29,26 +31,60 @@ export const App: React.FC = () => {
   const [exportOpen, setExportOpen] = useState(false);
   const [soloSceneId, setSoloSceneId] = useState<string | null>(null);
   const [theme, setTheme] = useState<"vanilla" | "dark">("vanilla");
+  const [canUndo, setCanUndo] = useState(false);
+  const [canRedo, setCanRedo] = useState(false);
+  const [onlineUsers, setOnlineUsers] = useState(1);
   const patchDebounce = useRef<ReturnType<typeof setTimeout> | null>(null);
   const playerRef = useRef<PlayerRef>(null);
+  const wsRef = useRef<WebSocket | null>(null);
 
   useEffect(() => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
-  // Subscribe to live composition updates - the agent (or another browser
-  // tab) can change the project and this view reflects it immediately.
+  // ── WebSocket: real-time composition + collaboration ──────────────────────
   useEffect(() => {
-    const source = new EventSource("/api/composition/stream");
-    source.onmessage = (event) => {
-      const next: Composition = JSON.parse(event.data);
-      setComposition(next);
-      setSelectedSceneId((prev) => {
-        if (prev && next.scenes.some((s) => s.id === prev)) return prev;
-        return next.scenes[next.scenes.length - 1]?.id ?? null;
-      });
+    const connect = () => {
+      const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+      const ws = new WebSocket(`${protocol}//${window.location.host}`);
+      wsRef.current = ws;
+
+      ws.onmessage = (event) => {
+        try {
+          const msg = JSON.parse(event.data);
+
+          if (msg.type === "composition") {
+            const next: Composition = msg.composition;
+            setComposition(next);
+            setCanUndo(Boolean(msg.canUndo));
+            setCanRedo(Boolean(msg.canRedo));
+            setSelectedSceneId((prev) => {
+              if (prev && next.scenes.some((s) => s.id === prev)) return prev;
+              return next.scenes[next.scenes.length - 1]?.id ?? null;
+            });
+          }
+
+          if (msg.type === "users") {
+            setOnlineUsers(Number(msg.count) || 1);
+          }
+        } catch {
+          // ignore malformed frames
+        }
+      };
+
+      ws.onclose = () => {
+        // Reconnect after 2s if disconnected
+        setTimeout(connect, 2000);
+      };
+
+      ws.onerror = () => ws.close();
     };
-    return () => source.close();
+
+    connect();
+
+    return () => {
+      wsRef.current?.close();
+    };
   }, []);
 
   // Fetch chat log on mount
@@ -72,8 +108,10 @@ export const App: React.FC = () => {
     try {
       const res = await fetch("/api/composition/undo", { method: "POST" });
       if (res.ok) {
-        const next: Composition = await res.json();
-        setComposition(next);
+        const data = await res.json();
+        if (data.composition) setComposition(data.composition);
+        if (typeof data.canUndo === "boolean") setCanUndo(data.canUndo);
+        if (typeof data.canRedo === "boolean") setCanRedo(data.canRedo);
       }
     } catch {
       // ignore
@@ -84,8 +122,10 @@ export const App: React.FC = () => {
     try {
       const res = await fetch("/api/composition/redo", { method: "POST" });
       if (res.ok) {
-        const next: Composition = await res.json();
-        setComposition(next);
+        const data = await res.json();
+        if (data.composition) setComposition(data.composition);
+        if (typeof data.canUndo === "boolean") setCanUndo(data.canUndo);
+        if (typeof data.canRedo === "boolean") setCanRedo(data.canRedo);
       }
     } catch {
       // ignore
@@ -171,20 +211,15 @@ export const App: React.FC = () => {
     if (!element) return;
 
     const elementEnd = element.startFrame + element.durationInFrames;
-    if (splitFrame <= element.startFrame + 2 || splitFrame >= elementEnd - 2) {
-      return;
-    }
+    if (splitFrame <= element.startFrame + 2 || splitFrame >= elementEnd - 2) return;
 
     const firstPartDuration = splitFrame - element.startFrame;
-    const secondPartStart = splitFrame;
-    const secondPartDuration = elementEnd - splitFrame;
-
     const secondPart = {
       ...structuredClone(element),
       id: `el-${Date.now().toString(36)}-${Math.random().toString(36).substring(2, 6)}`,
       name: `${element.name} (Part 2)`,
-      startFrame: secondPartStart,
-      durationInFrames: secondPartDuration,
+      startFrame: splitFrame,
+      durationInFrames: elementEnd - splitFrame,
     };
 
     const sceneIdToUpdate = targetScene.id;
@@ -230,11 +265,7 @@ export const App: React.FC = () => {
       solo: false,
       collapsed: false,
     };
-
-    const next: Composition = {
-      ...composition,
-      scenes: [...composition.scenes, newScene],
-    };
+    const next: Composition = { ...composition, scenes: [...composition.scenes, newScene] };
     setSelectedSceneId(newId);
     updateServerComposition(next);
   };
@@ -261,16 +292,11 @@ export const App: React.FC = () => {
     updateServerComposition(next);
   };
 
-  // Bind keyboard shortcuts
   useKeyboard({
     onUndo: handleUndo,
     onRedo: handleRedo,
-    onDelete: () => {
-      if (selectedElementId) deleteElement(selectedElementId);
-    },
-    onDuplicate: () => {
-      if (selectedElementId) duplicateElement(selectedElementId);
-    },
+    onDelete: () => { if (selectedElementId) deleteElement(selectedElementId); },
+    onDuplicate: () => { if (selectedElementId) duplicateElement(selectedElementId); },
     onDeselect: () => setSelectedElementId(null),
   });
 
@@ -307,12 +333,7 @@ export const App: React.FC = () => {
     const response = await fetch("/api/agent/prompt", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        prompt: currentPrompt,
-        model,
-        mentions,
-        imageUrls,
-      }),
+      body: JSON.stringify({ prompt: currentPrompt, model, mentions, imageUrls }),
     });
 
     const reader = response.body?.getReader();
@@ -320,7 +341,6 @@ export const App: React.FC = () => {
     let buffer = "";
 
     if (reader) {
-      // eslint-disable-next-line no-constant-condition
       while (true) {
         const { value, done } = await reader.read();
         if (done) break;
@@ -336,9 +356,7 @@ export const App: React.FC = () => {
             const event = JSON.parse(line.slice("data: ".length)) as ChatEvent;
             setChatLog((prev) => [...prev, event]);
             followSceneFromEvent(event);
-            if (event.type === "final") {
-              setSelectedElementId(null);
-            }
+            if (event.type === "final") setSelectedElementId(null);
           } catch {
             // ignore malformed/empty keepalive chunks
           }
@@ -355,16 +373,29 @@ export const App: React.FC = () => {
     ? { ...composition, scenes: composition.scenes.filter((s) => s.id === soloSceneId) }
     : composition;
 
+  const hasStoryboard = Boolean(composition.storyboard);
+
   return (
     <div className="app" data-mobile-tab={mobileTab}>
       <div className="header">
         <div className="header-left">
           <DevHiveLogo />
+          <ProjectPicker
+            currentName={composition.name}
+            onLoad={(comp) => setComposition(comp as Composition)}
+          />
         </div>
         <div className="header-right">
+          {/* Online users indicator */}
+          {onlineUsers > 1 && (
+            <div className="online-users-badge" title={`${onlineUsers} users online`}>
+              <span className="online-dot" />
+              {onlineUsers}
+            </div>
+          )}
           <button
             className="theme-toggle-btn"
-            title={`Switch Theme (Current: ${theme})`}
+            title={`Switch Theme (${theme})`}
             onClick={() => setTheme((t) => (t === "vanilla" ? "dark" : "vanilla"))}
           >
             {theme === "vanilla" ? "🍦 Vanilla" : "🌙 Dark"}
@@ -382,13 +413,11 @@ export const App: React.FC = () => {
 
       {exportOpen && <ExportPanel onClose={() => setExportOpen(false)} />}
 
+      {/* Mobile tab bar */}
       <div className="mobile-tabbar">
         <button
           className={mobileTab === "timeline" ? "active" : ""}
-          onClick={() => {
-            setMobileTab("timeline");
-            setBottomTab("timeline");
-          }}
+          onClick={() => { setMobileTab("timeline"); setBottomTab("timeline"); }}
         >
           🎬 Timeline
         </button>
@@ -400,19 +429,13 @@ export const App: React.FC = () => {
         </button>
         <button
           className={mobileTab === "chat" ? "active" : ""}
-          onClick={() => {
-            setMobileTab("chat");
-            setBottomTab("chat");
-          }}
+          onClick={() => { setMobileTab("chat"); setBottomTab("chat"); }}
         >
           🤖 Agent
         </button>
         <button
           className={mobileTab === "split" ? "active" : ""}
-          onClick={() => {
-            setMobileTab("split");
-            setBottomTab("split");
-          }}
+          onClick={() => { setMobileTab("split"); setBottomTab("split"); }}
         >
           ◫ Split
         </button>
@@ -449,36 +472,51 @@ export const App: React.FC = () => {
         onUpdateSceneTransition={updateSceneTransition}
       />
 
-      {/* Bottom Area: NLE Timeline & AI Agent Chat Workspace */}
+      {/* Bottom Area */}
       <div className="bottom-workspace">
         <div className="bottom-workspace-tabbar">
           <button
             className={`bottom-tab-btn ${bottomTab === "timeline" ? "active" : ""}`}
-            onClick={() => {
-              setBottomTab("timeline");
-              setMobileTab("timeline");
-            }}
+            onClick={() => { setBottomTab("timeline"); setMobileTab("timeline"); }}
           >
-            🎬 NLE Timeline
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor">
+              <rect x="1" y="4" width="12" height="2" rx="1" />
+              <rect x="1" y="8" width="8" height="2" rx="1" />
+            </svg>
+            NLE Timeline
           </button>
           <button
             className={`bottom-tab-btn ${bottomTab === "chat" ? "active" : ""}`}
-            onClick={() => {
-              setBottomTab("chat");
-              setMobileTab("chat");
-            }}
+            onClick={() => { setBottomTab("chat"); setMobileTab("chat"); }}
           >
-            🤖 AI Agent Workspace
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor">
+              <path d="M2 2h10a1 1 0 011 1v6a1 1 0 01-1 1H5L2 13V3a1 1 0 011-1z" />
+            </svg>
+            AI Agent
             {chatLog.length > 0 && <span className="tab-badge">{chatLog.length}</span>}
           </button>
           <button
-            className={`bottom-tab-btn ${bottomTab === "split" ? "active" : ""}`}
-            onClick={() => {
-              setBottomTab("split");
-              setMobileTab("split");
-            }}
+            className={`bottom-tab-btn ${bottomTab === "storyboard" ? "active" : ""} ${hasStoryboard ? "has-content" : ""}`}
+            onClick={() => { setBottomTab("storyboard"); setMobileTab("chat"); }}
+            title={hasStoryboard ? "View storyboard" : "No storyboard yet"}
           >
-            ◫ Split View
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor">
+              <rect x="1" y="1" width="12" height="12" rx="1" fill="none" stroke="currentColor" strokeWidth="1.2" />
+              <line x1="1" y1="5" x2="13" y2="5" stroke="currentColor" strokeWidth="1.2" />
+              <line x1="5" y1="5" x2="5" y2="13" stroke="currentColor" strokeWidth="1.2" />
+            </svg>
+            Storyboard
+            {hasStoryboard && <span className="storyboard-dot" />}
+          </button>
+          <button
+            className={`bottom-tab-btn ${bottomTab === "split" ? "active" : ""}`}
+            onClick={() => { setBottomTab("split"); setMobileTab("split"); }}
+          >
+            <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor">
+              <rect x="1" y="1" width="5" height="12" rx="1" />
+              <rect x="8" y="1" width="5" height="12" rx="1" />
+            </svg>
+            Split
           </button>
         </div>
 
@@ -501,8 +539,8 @@ export const App: React.FC = () => {
                 onUpdateSceneDuration={updateSceneDuration}
                 onUndo={handleUndo}
                 onRedo={handleRedo}
-                canUndo={true}
-                canRedo={true}
+                canUndo={canUndo}
+                canRedo={canRedo}
               />
             </div>
           )}
@@ -518,6 +556,12 @@ export const App: React.FC = () => {
                 onClear={clearChat}
                 composition={composition}
               />
+            </div>
+          )}
+
+          {bottomTab === "storyboard" && (
+            <div className="bottom-pane pane-storyboard">
+              <StoryboardPanel composition={composition} />
             </div>
           )}
         </div>

@@ -1,16 +1,22 @@
 import "dotenv/config";
 import path from "path";
+import { createServer } from "http";
 import express from "express";
 import cors from "cors";
+import { WebSocketServer, WebSocket } from "ws";
 import type { Message } from "ollama";
 import { compositionStore } from "../store/compositionStore";
 import { chatLogStore } from "./chatLogStore";
+import { projectManager } from "../store/projectManager";
 import { runAgent } from "../agent/agentLoop";
 import { ollama, DEFAULT_OLLAMA_MODEL } from "../agent/ollamaClient";
 import { CompositionSchema } from "../schema/scene";
 import { renderComposition, RENDERS_DIR, type RenderFormat } from "./render";
 
 const app = express();
+const httpServer = createServer(app);
+const wss = new WebSocketServer({ server: httpServer });
+
 app.use(cors());
 app.use(express.json({ limit: "50mb" }));
 app.use(express.urlencoded({ limit: "50mb", extended: true }));
@@ -20,12 +26,55 @@ const PUBLIC_DIR = path.resolve(process.cwd(), "public");
 app.use(express.static(PUBLIC_DIR));
 
 const PORT = Number(process.env.PORT ?? 4000);
-
 let conversationHistory: Message[] = [];
 
+// ─── WebSocket: Real-time Collaboration ──────────────────────────────────────
+
+function getOnlineCount() {
+  return [...wss.clients].filter((c) => c.readyState === WebSocket.OPEN).length;
+}
+
+function broadcast(data: unknown) {
+  const msg = JSON.stringify(data);
+  wss.clients.forEach((client) => {
+    if (client.readyState === WebSocket.OPEN) client.send(msg);
+  });
+}
+
+wss.on("connection", (ws) => {
+  // Send current state immediately to the new client
+  ws.send(
+    JSON.stringify({
+      type: "composition",
+      composition: compositionStore.get(),
+      canUndo: compositionStore.canUndo(),
+      canRedo: compositionStore.canRedo(),
+    }),
+  );
+  // Broadcast updated user count to all
+  broadcast({ type: "users", count: getOnlineCount() });
+
+  ws.on("close", () => {
+    broadcast({ type: "users", count: getOnlineCount() });
+  });
+  ws.on("error", () => {});
+});
+
+// Push every composition change to all WebSocket clients
+compositionStore.onChange((composition) => {
+  broadcast({
+    type: "composition",
+    composition,
+    canUndo: compositionStore.canUndo(),
+    canRedo: compositionStore.canRedo(),
+  });
+});
+
+// ─── Bootstrap ───────────────────────────────────────────────────────────────
 await compositionStore.load();
 await chatLogStore.load();
 
+// ─── Composition API ─────────────────────────────────────────────────────────
 app.get("/api/composition", (_req, res) => {
   res.json(compositionStore.get());
 });
@@ -46,7 +95,11 @@ app.post("/api/composition/undo", async (_req, res) => {
     res.status(400).json({ error: "Nothing to undo" });
     return;
   }
-  res.json(result);
+  res.json({
+    composition: result,
+    canUndo: compositionStore.canUndo(),
+    canRedo: compositionStore.canRedo(),
+  });
 });
 
 app.post("/api/composition/redo", async (_req, res) => {
@@ -55,9 +108,18 @@ app.post("/api/composition/redo", async (_req, res) => {
     res.status(400).json({ error: "Nothing to redo" });
     return;
   }
-  res.json(result);
+  res.json({
+    composition: result,
+    canUndo: compositionStore.canUndo(),
+    canRedo: compositionStore.canRedo(),
+  });
 });
 
+app.get("/api/composition/history-state", (_req, res) => {
+  res.json({ canUndo: compositionStore.canUndo(), canRedo: compositionStore.canRedo() });
+});
+
+// SSE stream kept for backward compatibility
 app.get("/api/composition/stream", (req, res) => {
   res.set({
     "Content-Type": "text/event-stream",
@@ -65,29 +127,76 @@ app.get("/api/composition/stream", (req, res) => {
     Connection: "keep-alive",
   });
   res.flushHeaders();
-  res.write(`data: ${JSON.stringify(compositionStore.get())}\n\n`);
 
-  const unsubscribe = compositionStore.onChange((composition) => {
-    res.write(`data: ${JSON.stringify(composition)}\n\n`);
-  });
-
+  const sendState = () => {
+    res.write(
+      `data: ${JSON.stringify({
+        composition: compositionStore.get(),
+        canUndo: compositionStore.canUndo(),
+        canRedo: compositionStore.canRedo(),
+      })}\n\n`,
+    );
+  };
+  sendState();
+  const unsubscribe = compositionStore.onChange(() => sendState());
   req.on("close", unsubscribe);
 });
 
+// ─── Project Management API ───────────────────────────────────────────────────
+app.get("/api/projects", async (_req, res) => {
+  try {
+    const projects = await projectManager.listProjects();
+    res.json(projects);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post("/api/projects", async (req, res) => {
+  const { name } = req.body as { name?: string };
+  try {
+    const id = await projectManager.createProject(name || "New Project");
+    res.json({ id });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.post("/api/projects/:id/load", async (req, res) => {
+  try {
+    // Save current composition before switching
+    await projectManager.snapshotAsCurrent(compositionStore.get());
+    const composition = await projectManager.loadProject(req.params.id);
+    await compositionStore.set(composition);
+    conversationHistory = []; // Fresh context when switching projects
+    res.json(compositionStore.get());
+  } catch (err) {
+    res.status(404).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+app.delete("/api/projects/:id", async (req, res) => {
+  try {
+    await projectManager.deleteProject(req.params.id);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
+// ─── Models ──────────────────────────────────────────────────────────────────
 app.get("/api/models", async (_req, res) => {
   try {
     const { models } = await ollama.list();
-    res.json({
-      models: models.map((m) => m.name),
-      defaultModel: DEFAULT_OLLAMA_MODEL,
-    });
+    res.json({ models: models.map((m) => m.name), defaultModel: DEFAULT_OLLAMA_MODEL });
   } catch (err) {
     res.status(502).json({
-      error: `Couldn't reach Ollama at configured host: ${err instanceof Error ? err.message : String(err)}`,
+      error: `Couldn't reach Ollama: ${err instanceof Error ? err.message : String(err)}`,
     });
   }
 });
 
+// ─── Chat Log ────────────────────────────────────────────────────────────────
 app.get("/api/chatlog", (_req, res) => {
   res.json(chatLogStore.get());
 });
@@ -98,6 +207,7 @@ app.delete("/api/chatlog", async (_req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Agent ───────────────────────────────────────────────────────────────────
 app.post("/api/agent/prompt", async (req, res) => {
   const { prompt, model, mentions, imageUrls } = req.body as {
     prompt?: string;
@@ -132,11 +242,11 @@ app.post("/api/agent/prompt", async (req, res) => {
   );
 
   conversationHistory = updatedHistory.slice(-40);
-
   res.write("event: done\ndata: {}\n\n");
   res.end();
 });
 
+// ─── Render ──────────────────────────────────────────────────────────────────
 app.post("/api/render", async (req, res) => {
   const { format } = req.body as { format?: RenderFormat };
   const chosenFormat: RenderFormat = format === "gif" ? "gif" : "mp4";
@@ -156,6 +266,7 @@ app.post("/api/render", async (req, res) => {
   res.end();
 });
 
-app.listen(PORT, () => {
-  console.log(`Enterprise Agent Studio API listening on http://localhost:${PORT}`);
+// ─── Start ───────────────────────────────────────────────────────────────────
+httpServer.listen(PORT, () => {
+  console.log(`DevHive Motion — API + WebSocket on http://localhost:${PORT}`);
 });

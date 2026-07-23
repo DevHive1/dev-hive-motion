@@ -22,6 +22,7 @@ import { fetchPageContent } from "./providers/pageContent";
 import { checkContrast } from "./providers/contrast";
 import { generateImage } from "./providers/pollinations";
 import { generateVoiceover } from "./providers/edgeTts";
+import { searchFreeMusic } from "./providers/jamendo";
 import { computeLayoutFlags, type LayoutBox } from "./layoutCheck";
 import { setOrientationDef, setOrientationImpl } from "./tools/orientation";
 import { reorderScenesDef, reorderScenesImpl } from "./tools/scene/reorder";
@@ -734,17 +735,37 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "add_audio_element",
-      description: "Add a voiceover or music track to a scene - src from generate_voiceover or a URL you've verified with check_url.",
+      description: "Add a voiceover or music track to a scene - src from generate_voiceover, search_free_music, or a URL you've verified with check_url.",
       parameters: {
         type: "object",
         properties: {
           sceneId: { type: "string" },
-          src: { type: "string" },
-          volume: { type: "number", description: "0-1, default 1." },
+          src: { type: "string", description: "Direct audio URL from generate_voiceover or search_free_music." },
+          volume: { type: "number", description: "0-1, default 1. Use 0.3-0.5 for background music under voiceover." },
           startFrame: { type: "number" },
           durationInFrames: { type: "number" },
+          name: { type: "string", description: "Descriptive name, e.g. 'Voiceover Scene 1' or 'Background Music'." },
         },
         required: ["sceneId", "src"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "search_free_music",
+      description:
+        "Search for free, Creative Commons–licensed background music tracks (Jamendo) by genre or mood. Returns direct MP3 URLs ready to use with add_audio_element. Requires JAMENDO_CLIENT_ID in .env — if not configured, this tool errors with clear instructions. Good queries: 'cinematic epic', 'calm ambient', 'upbeat corporate', 'lo-fi study', 'dramatic orchestral'.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Genre or mood, e.g. 'ambient background', 'epic cinematic', 'corporate upbeat'.",
+          },
+          limit: { type: "number", description: "Max tracks to return, default 5." },
+        },
+        required: ["query"],
       },
     },
   },
@@ -1440,12 +1461,21 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
     return generateVoiceover(args.text, (args.voice as any) ?? "nova");
   },
 
-  async add_audio_element(args: any) {
+  async add_audio_element(args: {
+    sceneId: string;
+    src: string;
+    volume?: number;
+    startFrame?: number;
+    durationInFrames?: number;
+    name?: string;
+  }) {
+    if (!args.sceneId) throw new Error("add_audio_element: sceneId is required.");
+    if (!args.src) throw new Error("add_audio_element: src is required — use generate_voiceover or search_free_music to get a real URL.");
     const element: AudioElement = {
       id: `el-${nanoid(6)}`,
       type: "audio",
-      name: "Audio",
-      src: args.src ?? "",
+      name: args.name ?? "Audio",
+      src: args.src,
       volume: args.volume ?? 1,
       x: 0,
       y: 0,
@@ -1463,6 +1493,11 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
     };
     await addElementToScene(args.sceneId, element);
     return { elementId: element.id };
+  },
+
+  async search_free_music(args: { query: string; limit?: number }) {
+    const tracks = await searchFreeMusic(args.query, args.limit ?? 5);
+    return { tracks };
   },
 
   async set_orientation(args: any) {
