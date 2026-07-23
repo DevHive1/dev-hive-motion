@@ -1,0 +1,77 @@
+:root,
+[data-theme="vanilla"] {
+  /* Vanilla Cream Surface Palette */
+  --surface-0: #F9F6F0;
+  --surface-1: #FFFFFF;
+  --surface-2: #F2EDE4;
+  --surface-3: #E7E0D3;
+  --surface-4: #DCD4C4;
+
+  /* Borders */
+  --border-subtle: rgba(45, 38, 30, 0.08);
+  --border-default: rgba(45, 38, 30, 0.14);
+  --border-strong: rgba(45, 38, 30, 0.26);
+  --border-accent: rgba(217, 119, 6, 0.45);
+
+  /* Text */
+  --text-primary: #1F1B16;
+  --text-secondary: #6B6255;
+  --text-tertiary: #998F7E;
+  --text-inverse: #FFFFFF;
+
+  /* Accents */
+  --accent-primary: #D97706;
+  --accent-secondary: #7C3AED;
+  --accent-warning: #D97706;
+  --accent-danger: #DC2626;
+  --accent-success: #10B981;
+
+  /* Typography */
+  --font-sans: "Inter", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, monospace;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 10px;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(45, 38, 30, 0.08);
+  --shadow-md: 0 4px 12px rgba(45, 38, 30, 0.10);
+  --shadow-lg: 0 8px 32px rgba(45, 38, 30, 0.14);
+  --shadow-glow: 0 0 20px rgba(217, 119, 6, 0.2);
+}
+
+[data-theme="dark"] {
+  /* Dark Obsidian Palette */
+  --surface-0: #09090b;
+  --surface-1: #0f1115;
+  --surface-2: #161a21;
+  --surface-3: #1c2129;
+  --surface-4: #242a34;
+
+  /* Borders */
+  --border-subtle: rgba(255, 255, 255, 0.06);
+  --border-default: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.16);
+  --border-accent: rgba(59, 210, 208, 0.4);
+
+  /* Text */
+  --text-primary: #f0f2f5;
+  --text-secondary: #8b95a5;
+  --text-tertiary: #5a6374;
+  --text-inverse: #09090b;
+
+  /* Accents */
+  --accent-primary: #3bd2d0;
+  --accent-secondary: #a78bfa;
+  --accent-warning: #ffb020;
+  --accent-danger: #ff5d5d;
+  --accent-success: #22c55e;
+
+  /* Shadows */
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 20px rgba(59, 210, 208, 0.15);
+}

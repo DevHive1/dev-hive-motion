@@ -1,0 +1,121 @@
+{
+  "id": "main",
+  "name": "Demo project",
+  "fps": 30,
+  "width": 1920,
+  "height": 1080,
+  "scenes": [
+    {
+      "id": "scene-1",
+      "name": "Intro",
+      "durationInFrames": 90,
+      "backgroundColor": "#0b0b0f",
+      "elements": [
+        {
+          "id": "el-bg",
+          "name": "Background gradient",
+          "type": "shape",
+          "shape": "rectangle",
+          "fill": "#0b0b0f",
+          "gradient": { "from": "#1e293b", "to": "#0b0b0f", "angleDeg": 135 },
+          "borderRadius": 0,
+          "strokeWidth": 0,
+          "x": 0,
+          "y": 0,
+          "width": 100,
+          "height": 100,
+          "rotation": 0,
+          "opacity": 1,
+          "zIndex": 0,
+          "startFrame": 0,
+          "durationInFrames": 90,
+          "animations": []
+        },
+        {
+          "id": "el-1",
+          "name": "Headline",
+          "type": "text",
+          "text": "Built by the agent.",
+          "x": 10,
+          "y": 42,
+          "width": 80,
+          "height": 18,
+          "fontSize": 96,
+          "fontFamily": "Inter, sans-serif",
+          "fontWeight": 700,
+          "color": "#ffffff",
+          "textAlign": "center",
+          "letterSpacing": 0,
+          "textShadow": true,
+          "rotation": 0,
+          "opacity": 1,
+          "zIndex": 1,
+          "startFrame": 0,
+          "durationInFrames": 90,
+          "animations": [
+            {
+              "id": "anim-1",
+              "property": "opacity",
+              "from": 0,
+              "to": 1,
+              "startFrame": 0,
+              "durationInFrames": 20,
+              "easing": "easeOut"
+            },
+            {
+              "id": "anim-2",
+              "property": "y",
+              "from": 4,
+              "to": 0,
+              "startFrame": 0,
+              "durationInFrames": 20,
+              "easing": "easeOut"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "id": "scene-2",
+      "name": "Outro",
+      "durationInFrames": 60,
+      "backgroundColor": "#111827",
+      "transitionIn": { "type": "fade", "direction": "from-right", "durationInFrames": 15 },
+      "elements": [
+        {
+          "id": "el-2",
+          "name": "Outro text",
+          "type": "text",
+          "text": "Percent-based coordinates.",
+          "x": 10,
+          "y": 42,
+          "width": 80,
+          "height": 18,
+          "fontSize": 64,
+          "fontFamily": "Inter, sans-serif",
+          "fontWeight": 600,
+          "color": "#ffffff",
+          "textAlign": "center",
+          "letterSpacing": 0,
+          "textShadow": false,
+          "rotation": 0,
+          "opacity": 1,
+          "zIndex": 1,
+          "startFrame": 0,
+          "durationInFrames": 60,
+          "animations": [
+            {
+              "id": "anim-3",
+              "property": "opacity",
+              "from": 0,
+              "to": 1,
+              "startFrame": 0,
+              "durationInFrames": 15,
+              "easing": "easeOut"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

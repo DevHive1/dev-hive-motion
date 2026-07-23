@@ -1,0 +1,12 @@
+node_modules/
+dist/
+data/
+.env
+*.log
+
+# Generated media (downloaded by Pollinations provider on demand)
+public/audio/
+public/images/
+
+# Devy Agent local data (plan, memory, chat log, cache)
+.devy-agent/
