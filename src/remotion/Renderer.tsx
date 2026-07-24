@@ -91,6 +91,12 @@ function presentationFor(
 export const Renderer: React.FC<{ composition: Composition }> = ({ composition }) => {
   return (
     <AbsoluteFill style={{ backgroundColor: "#000" }}>
+      {/* Global audio tracks (background music / project-wide VO) */}
+      {composition.globalAudio?.map((track) => (
+        <Sequence key={track.id} from={track.startFrame} durationInFrames={track.durationInFrames} layout="none">
+          <AudioElementRenderer element={track} />
+        </Sequence>
+      ))}
       <TransitionSeries>
         {composition.scenes.map((scene, i) => {
           const transition = scene.transitionIn;

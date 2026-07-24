@@ -85,8 +85,17 @@ export const toolDefinitions = [
           color: { type: "string" },
           textAlign: { type: "string", enum: ["left", "center", "right"] },
           letterSpacing: { type: "number", description: "Pixels. 2-4 for small uppercase-style kicker labels." },
-          textShadow: { type: "boolean", description: "Turn on when text sits directly over a busy photo/video." },
+          textShadow: {
+            oneOf: [
+              { type: "boolean" },
+              { type: "string" }
+            ],
+            description: "Shadow on text. Pass true for a default soft drop-shadow, false for none, or a raw CSS value like '0 4px 24px rgba(0,0,0,0.9)' for precise control. Always use on text over photos/video.",
+          },
           highlightColor: { type: "string", description: "Background color chip behind the text - lower-third/caption-bar/badge look." },
+          strokeColor: { type: "string", description: "Text outline color e.g. '#000000'. Pair with strokeWidth for bold outline style." },
+          strokeWidth: { type: "number", description: "Text outline thickness in px. 1-3 subtle, 4-8 bold." },
+          gradient: { type: "object", description: "Gradient text fill (overrides color). {angle:135, stops:[{color:'#f00',offset:0},{color:'#00f',offset:1}]}" },
           startFrame: { type: "number" },
           durationInFrames: { type: "number" },
         },
@@ -836,6 +845,9 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       letterSpacing: args.letterSpacing ?? 0,
       textShadow: args.textShadow ?? false,
       highlightColor: args.highlightColor,
+      strokeColor: args.strokeColor,
+      strokeWidth: args.strokeWidth ?? 0,
+      gradient: args.gradient,
       animations: [],
       locked: false,
       hidden: false,

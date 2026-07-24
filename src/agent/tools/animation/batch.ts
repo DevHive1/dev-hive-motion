@@ -75,6 +75,50 @@ export async function animateSceneImpl(args: Record<string, unknown>) {
           durationInFrames: duration,
           easing: "easeOut",
         });
+      } else if (style === "slide_left") {
+        // Slide in from the right → settles at natural x
+        el.animations.push(
+          {
+            id: generateId("anim"),
+            property: "opacity",
+            from: 0,
+            to: 1,
+            startFrame,
+            durationInFrames: Math.round(duration * 0.6),
+            easing: "easeOut",
+          },
+          {
+            id: generateId("anim"),
+            property: "x",
+            from: el.x + 12,
+            to: el.x,
+            startFrame,
+            durationInFrames: duration,
+            easing: "easeOut",
+          },
+        );
+      } else if (style === "slide_right") {
+        // Slide in from the left → settles at natural x
+        el.animations.push(
+          {
+            id: generateId("anim"),
+            property: "opacity",
+            from: 0,
+            to: 1,
+            startFrame,
+            durationInFrames: Math.round(duration * 0.6),
+            easing: "easeOut",
+          },
+          {
+            id: generateId("anim"),
+            property: "x",
+            from: el.x - 12,
+            to: el.x,
+            startFrame,
+            durationInFrames: duration,
+            easing: "easeOut",
+          },
+        );
       } else if (style === "scale_in") {
         el.animations.push(
           {

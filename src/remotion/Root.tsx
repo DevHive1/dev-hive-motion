@@ -20,10 +20,14 @@ export const RemotionRoot: React.FC = () => {
       // the timeline - no manual re-registration needed.
       calculateMetadata={async ({ props }) => {
         const parsed = CompositionSchema.parse(props.composition);
-        const durationInFrames = Math.max(
-          1,
-          parsed.scenes.reduce((sum, s) => sum + s.durationInFrames, 0),
-        );
+        // Use totalDurationInFrames so that transition overlaps are subtracted
+        // (same logic as src/schema/scene.ts:totalDurationInFrames), otherwise
+        // the Remotion timeline grows by the sum of transition durations → trailing black frames.
+        const sceneSum = parsed.scenes.reduce((sum, s) => sum + s.durationInFrames, 0);
+        const transitionOverlap = parsed.scenes
+          .slice(1)
+          .reduce((sum, s) => sum + (s.transitionIn?.durationInFrames ?? 0), 0);
+        const durationInFrames = Math.max(1, sceneSum - transitionOverlap);
         return {
           durationInFrames,
           fps: parsed.fps,

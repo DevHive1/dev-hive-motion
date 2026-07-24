@@ -58,8 +58,15 @@ export const TextElementSchema = z.object({
   color: z.string().default("#ffffff"),
   textAlign: z.enum(["left", "center", "right"]).default("center"),
   letterSpacing: z.number().default(0),
-  textShadow: z.boolean().default(false),
+  // textShadow accepts true (uses default soft shadow), false/undefined (none),
+  // or a raw CSS shadow string e.g. "0 4px 24px rgba(0,0,0,0.8)".
+  textShadow: z.union([z.boolean(), z.string()]).default(false),
   highlightColor: z.string().optional(),
+  // Text stroke (outline). strokeWidth in px, strokeColor in any CSS color.
+  strokeColor: z.string().optional(),
+  strokeWidth: z.number().default(0),
+  // Text gradient — overrides `color` when set.
+  gradient: GradientSchema.optional(),
 });
 
 export const ImageElementSchema = z.object({
