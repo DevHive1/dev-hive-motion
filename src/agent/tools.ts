@@ -28,6 +28,7 @@ import { jinaReadUrl } from "./providers/jinaReader";
 import { computeLayoutFlags, type LayoutBox } from "./layoutCheck";
 import { setOrientationDef, setOrientationImpl } from "./tools/orientation";
 import { reorderScenesDef, reorderScenesImpl } from "./tools/scene/reorder";
+import { moveSceneDef, moveSceneImpl } from "./tools/scene/move";
 import { setAllTransitionsDef, setAllTransitionsImpl } from "./tools/scene/transitions";
 import { animateSceneDef, animateSceneImpl } from "./tools/animation/batch";
 import { editByMentionDef, editByMentionImpl } from "./tools/element/mention";
@@ -36,6 +37,7 @@ import { editByMentionDef, editByMentionImpl } from "./tools/element/mention";
 export const toolDefinitions = [
   setOrientationDef,
   reorderScenesDef,
+  moveSceneDef,
   setAllTransitionsDef,
   animateSceneDef,
   editByMentionDef,
@@ -1684,6 +1686,9 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
   },
   async reorder_scenes(args: any) {
     return reorderScenesImpl(args);
+  },
+  async move_scene(args: any) {
+    return moveSceneImpl(args);
   },
   async set_all_transitions(args: any) {
     return setAllTransitionsImpl(args);

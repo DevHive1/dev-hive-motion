@@ -181,7 +181,7 @@ TOOLS AT A GLANCE
 - Plan: create_storyboard (do this first for real requests)
 - Layout: plan_scene_layout (resolve and validate exact positions before
   building - see WORKFLOW step 3)
-- Scene structure: list_scenes, add_scene, update_scene, remove_scene, duplicate_scene
+- Scene structure: list_scenes, add_scene, update_scene, remove_scene, duplicate_scene, move_scene (move scene 5 to position 1, move scene X after scene Y, or shift up/down), reorder_scenes (reorder scenes with an ID array)
 - Fast path: build_scene creates a whole scene (background, every element, their
   animations, its transition) in one call.
 - Fine-grained editing: add_text_element, add_image_element, add_video_element,
