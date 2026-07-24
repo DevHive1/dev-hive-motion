@@ -841,6 +841,26 @@ export const toolDefinitions = [
       },
     },
   },
+  {
+    type: "function",
+    function: {
+      name: "find_sound_effect",
+      description:
+        "Search for short sound effects (Freesound MP3s) for UI element entrances, animations, pop-ins, clicks, whooshes, risers, transitions, and accent effects. Returns direct audio URLs ready to use with add_audio_element.",
+      parameters: {
+        type: "object",
+        properties: {
+          query: {
+            type: "string",
+            description: "Sound effect type or keyword, e.g. 'whoosh', 'swoosh', 'pop', 'click', 'cinematic boom', 'chime', 'glitch', 'digital riser'.",
+          },
+          maxDuration: { type: "number", description: "Max duration in seconds (e.g. 2 for short FX)." },
+          limit: { type: "number", description: "Max results, default 6." },
+        },
+        required: ["query"],
+      },
+    },
+  },
   setAllTransitionsDef,
 ] as const;
 
