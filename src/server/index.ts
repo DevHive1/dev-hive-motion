@@ -7,7 +7,6 @@ import { WebSocketServer, WebSocket } from "ws";
 import type { Message } from "ollama";
 import { compositionStore } from "../store/compositionStore";
 import { chatLogStore } from "./chatLogStore";
-import { projectManager } from "../store/projectManager";
 import { runAgent } from "../agent/agentLoop";
 import { ollama, DEFAULT_OLLAMA_MODEL } from "../agent/ollamaClient";
 import { CompositionSchema } from "../schema/scene";
@@ -142,47 +141,6 @@ app.get("/api/composition/stream", (req, res) => {
   req.on("close", unsubscribe);
 });
 
-// ─── Project Management API ───────────────────────────────────────────────────
-app.get("/api/projects", async (_req, res) => {
-  try {
-    const projects = await projectManager.listProjects();
-    res.json(projects);
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-app.post("/api/projects", async (req, res) => {
-  const { name } = req.body as { name?: string };
-  try {
-    const id = await projectManager.createProject(name || "New Project");
-    res.json({ id });
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-app.post("/api/projects/:id/load", async (req, res) => {
-  try {
-    // Save current composition before switching
-    await projectManager.snapshotAsCurrent(compositionStore.get());
-    const composition = await projectManager.loadProject(req.params.id);
-    await compositionStore.set(composition);
-    conversationHistory = []; // Fresh context when switching projects
-    res.json(compositionStore.get());
-  } catch (err) {
-    res.status(404).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
-
-app.delete("/api/projects/:id", async (req, res) => {
-  try {
-    await projectManager.deleteProject(req.params.id);
-    res.json({ ok: true });
-  } catch (err) {
-    res.status(500).json({ error: err instanceof Error ? err.message : String(err) });
-  }
-});
 
 // ─── Models ──────────────────────────────────────────────────────────────────
 app.get("/api/models", async (_req, res) => {

@@ -55,15 +55,12 @@ more elaborate prompt means MORE reason to plan carefully, not less.
    "about Egypt" should be full of specific things you found (which
    pyramid, which pharaoh, what year, what it's made of) - not vague
    filler, because there wasn't anything concrete to say.
-2. PLAN with create_storyboard: a concept, a narrative arc, a specific mood
-   direction, and a detailed scene-by-scene breakdown - each scene's
-   contentNotes should hold the actual facts/copy from your research, ready
-   to become on-screen text. For a substantive topic, this usually means
-   6-10+ scenes, not 2-3 - compressing a rich subject into a couple of
-   generic scenes is the single most common way this ends up feeling thin.
-   This is the single most important step for making a video that holds
-   together and says something, instead of a handful of disconnected
-   captions. The user can view and download this plan.
+2. PLAN with create_storyboard: Give the storyboard a clear, descriptive title
+   (e.g., "Ancient Egypt Explainer", "SaaS Promo Video"). create_storyboard
+   automatically sets the composition title from this title. Include a clear concept, narrative arc,
+   and specific mood direction - each scene's contentNotes should hold the actual
+   facts/copy from your research, ready to become on-screen text. For a
+   substantive topic, plan 6-10+ scenes. The user can view and download this plan.
 3. LAY OUT each scene's elements with plan_scene_layout before building it,
    whenever a scene has more than one or two elements, or any text sits
    near/on a shape or image. Describe each element's role and position it

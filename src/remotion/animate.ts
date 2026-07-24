@@ -76,7 +76,8 @@ export function computeAnimatedStyle(
       const totalDur = anim.durationInFrames;
       const elapsed = Math.max(0, frameInScene - anim.startFrame);
       const cycleIndex = Math.floor(elapsed / totalDur);
-      const maxCycles = anim.loopCount === 0 ? Infinity : anim.loopCount + 1;
+      const loopCount = anim.loopCount ?? 0;
+      const maxCycles = loopCount === 0 ? Infinity : loopCount + 1;
 
       if (cycleIndex < maxCycles) {
         // Remap frame into the current cycle

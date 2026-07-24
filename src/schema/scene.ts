@@ -33,8 +33,8 @@ export const AnimationSchema = z.object({
   easing: Easing.default("easeInOut"),
   // Loop support: loop:true repeats the animation indefinitely within the element's duration.
   // loopCount: 0 = infinite, N = repeat N times after the first play.
-  loop: z.boolean().default(false),
-  loopCount: z.number().int().min(0).default(0),
+  loop: z.boolean().optional(),
+  loopCount: z.number().int().min(0).optional(),
 });
 
 // CSS mix-blend-mode values available for layering effects

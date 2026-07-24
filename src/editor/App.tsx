@@ -11,11 +11,10 @@ import { ExportPanel } from "./ExportPanel";
 import { CanvasOverlay } from "./CanvasOverlay";
 import { DevHiveLogo } from "./components/DevHiveLogo";
 import { StoryboardPanel } from "./components/StoryboardPanel";
-import { ProjectPicker } from "./components/ProjectPicker";
 import { useKeyboard } from "./hooks/useKeyboard";
 import type { MentionItem } from "./components/chat/MentionInput";
 
-type MobileTab = "timeline" | "elements" | "chat" | "split";
+type MobileTab = "timeline" | "elements" | "chat" | "split" | "storyboard";
 type BottomTab = "timeline" | "chat" | "split" | "storyboard";
 
 export const App: React.FC = () => {
@@ -42,11 +41,35 @@ export const App: React.FC = () => {
     document.documentElement.setAttribute("data-theme", theme);
   }, [theme]);
 
+  // ── Fetch composition & chat log on mount ──────────────────────────────────
+  useEffect(() => {
+    fetch("/api/composition")
+      .then((res) => res.json())
+      .then((data: Composition) => {
+        if (data && Array.isArray(data.scenes)) {
+          setComposition(data);
+          setSelectedSceneId((prev) => {
+            if (prev && data.scenes.some((s) => s.id === prev)) return prev;
+            return data.scenes[data.scenes.length - 1]?.id ?? null;
+          });
+        }
+      })
+      .catch(() => {});
+
+    fetch("/api/chatlog")
+      .then((res) => res.json())
+      .then((entries: ChatEvent[]) => setChatLog(entries))
+      .catch(() => {});
+  }, []);
+
   // ── WebSocket: real-time composition + collaboration ──────────────────────
   useEffect(() => {
     const connect = () => {
       const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-      const ws = new WebSocket(`${protocol}//${window.location.host}`);
+      const wsHost = window.location.port === "5173"
+        ? `${window.location.hostname}:4000`
+        : window.location.host;
+      const ws = new WebSocket(`${protocol}//${wsHost}`);
       wsRef.current = ws;
 
       ws.onmessage = (event) => {
@@ -85,14 +108,6 @@ export const App: React.FC = () => {
     return () => {
       wsRef.current?.close();
     };
-  }, []);
-
-  // Fetch chat log on mount
-  useEffect(() => {
-    fetch("/api/chatlog")
-      .then((res) => res.json())
-      .then((entries: ChatEvent[]) => setChatLog(entries))
-      .catch(() => {});
   }, []);
 
   const updateServerComposition = async (next: Composition) => {
@@ -380,10 +395,8 @@ export const App: React.FC = () => {
       <div className="header">
         <div className="header-left">
           <DevHiveLogo />
-          <ProjectPicker
-            currentName={composition.name}
-            onLoad={(comp) => setComposition(comp as Composition)}
-          />
+          <div className="header-divider" />
+          <span className="composition-title">{composition.name}</span>
         </div>
         <div className="header-right">
           {/* Online users indicator */}
@@ -413,6 +426,12 @@ export const App: React.FC = () => {
 
       {exportOpen && <ExportPanel onClose={() => setExportOpen(false)} />}
 
+      {/* Mobile platform indicator */}
+      <div className="mobile-platform-bar">
+        <div className="mobile-platform-badge">{composition.orientation}</div>
+        <span className="mobile-project-name">{composition.name}</span>
+      </div>
+
       {/* Mobile tab bar */}
       <div className="mobile-tabbar">
         <button
@@ -432,6 +451,12 @@ export const App: React.FC = () => {
           onClick={() => { setMobileTab("chat"); setBottomTab("chat"); }}
         >
           🤖 Agent
+        </button>
+        <button
+          className={mobileTab === "storyboard" ? "active" : ""}
+          onClick={() => { setMobileTab("storyboard"); setBottomTab("storyboard"); }}
+        >
+          📋 Plan
         </button>
         <button
           className={mobileTab === "split" ? "active" : ""}
@@ -497,7 +522,7 @@ export const App: React.FC = () => {
           </button>
           <button
             className={`bottom-tab-btn ${bottomTab === "storyboard" ? "active" : ""} ${hasStoryboard ? "has-content" : ""}`}
-            onClick={() => { setBottomTab("storyboard"); setMobileTab("chat"); }}
+            onClick={() => { setBottomTab("storyboard"); setMobileTab("storyboard"); }}
             title={hasStoryboard ? "View storyboard" : "No storyboard yet"}
           >
             <svg width="12" height="12" viewBox="0 0 14 14" fill="currentColor">
@@ -561,7 +586,7 @@ export const App: React.FC = () => {
 
           {bottomTab === "storyboard" && (
             <div className="bottom-pane pane-storyboard">
-              <StoryboardPanel composition={composition} />
+              <StoryboardPanel composition={composition} onSelectScene={(id) => setSelectedSceneId(id)} />
             </div>
           )}
         </div>

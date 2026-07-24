@@ -18,7 +18,7 @@ export const RemotionRoot: React.FC = () => {
       // Duration/fps/dimensions are derived from the composition JSON itself,
       // so the agent (or the editor) changing scenes automatically resizes
       // the timeline - no manual re-registration needed.
-      calculateMetadata={async ({ props }) => {
+      calculateMetadata={async ({ props }: { props: z.infer<typeof RootPropsSchema> }) => {
         const parsed = CompositionSchema.parse(props.composition);
         // Use totalDurationInFrames so that transition overlaps are subtracted
         // (same logic as src/schema/scene.ts:totalDurationInFrames), otherwise

@@ -60,16 +60,16 @@ export class PromptEngine {
       render: () => SYSTEM_PROMPT,
     });
 
-    // ── 2. Live project state ─────────────────────────────────────────────
+    // ── 2. Live composition state ─────────────────────────────────────────
     this.register({
-      id: "project-state",
+      id: "composition-state",
       priority: 50,
       render: (ctx) => {
         const { composition } = ctx;
         const totalFrames = composition.scenes.reduce((s, sc) => s + sc.durationInFrames, 0);
         const durationSec = (totalFrames / composition.fps).toFixed(1);
         return [
-          `CURRENT PROJECT STATE (live, as of this message):`,
+          `CURRENT COMPOSITION STATE (live, as of this message):`,
           `- Name: ${composition.name}`,
           `- Orientation: ${composition.orientation} (${composition.width}×${composition.height})`,
           `- FPS: ${composition.fps}`,

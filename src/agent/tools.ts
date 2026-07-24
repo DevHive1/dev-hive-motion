@@ -1288,6 +1288,9 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
     };
     await sceneStore.update((draft) => {
       draft.storyboard = storyboard;
+      if (args.title && args.title.trim()) {
+        draft.name = args.title.trim();
+      }
       return draft;
     });
     return { ok: true };

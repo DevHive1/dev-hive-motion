@@ -3,10 +3,12 @@ import type { Composition } from "../../schema/scene";
 
 interface StoryboardPanelProps {
   composition: Composition;
+  onSelectScene?: (sceneId: string) => void;
 }
 
-export const StoryboardPanel: React.FC<StoryboardPanelProps> = ({ composition }) => {
-  const [expandedIdx, setExpandedIdx] = useState<number | null>(null);
+export const StoryboardPanel: React.FC<StoryboardPanelProps> = ({ composition, onSelectScene }) => {
+  const [expandedIdx, setExpandedIdx] = useState<number | null>(0);
+  const [copied, setCopied] = useState(false);
   const sb = composition.storyboard;
 
   const handleDownload = () => {
@@ -43,22 +45,36 @@ export const StoryboardPanel: React.FC<StoryboardPanelProps> = ({ composition })
     URL.revokeObjectURL(url);
   };
 
+  const handleCopy = () => {
+    if (!sb) return;
+    const text = `${sb.title}\nConcept: ${sb.concept}\nMood: ${sb.moodDirection}\n\nScenes:\n` +
+      sb.scenes.map((s, i) => `${i + 1}. ${s.name}: ${s.purpose}`).join("\n");
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
   if (!sb) {
     return (
-      <div className="storyboard-panel">
+      <div className="storyboard-panel storyboard-empty-container">
         <div className="storyboard-empty">
           <div className="storyboard-empty-icon">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <rect x="3" y="3" width="18" height="18" rx="2" />
-              <line x1="3" y1="9" x2="21" y2="9" />
-              <line x1="9" y1="21" x2="9" y2="9" />
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" />
+              <polyline points="14 2 14 8 20 8" />
+              <line x1="16" y1="13" x2="8" y2="13" />
+              <line x1="16" y1="17" x2="8" y2="17" />
+              <polyline points="10 9 9 9 8 9" />
             </svg>
           </div>
-          <div className="storyboard-empty-title">No Storyboard Yet</div>
+          <div className="storyboard-empty-title">Production Storyboard & Plan</div>
           <div className="storyboard-empty-desc">
-            Ask the AI agent to plan a video — it builds a detailed storyboard here before touching the timeline.
+            No storyboard generated yet. Ask the AI Agent to build a video — it will create a full narrative blueprint, scene breakdown, and creative direction here.
           </div>
-          <code className="storyboard-example-prompt">"Create an explainer video about renewable energy"</code>
+          <div className="storyboard-example-prompt">
+            <span>Try asking:</span>
+            <code>"Create a 5-scene product launch video for DevHive Motion"</code>
+          </div>
         </div>
       </div>
     );
@@ -66,93 +82,192 @@ export const StoryboardPanel: React.FC<StoryboardPanelProps> = ({ composition })
 
   const builtCount = composition.scenes.length;
   const plannedCount = sb.scenes.length;
-  const progress = plannedCount > 0 ? Math.round((builtCount / plannedCount) * 100) : 0;
+  const progress = plannedCount > 0 ? Math.min(100, Math.round((builtCount / plannedCount) * 100)) : 0;
 
   return (
     <div className="storyboard-panel">
-      {/* Header */}
-      <div className="storyboard-header">
-        <div className="storyboard-meta">
-          <div className="storyboard-title">{sb.title}</div>
-          <div className="storyboard-concept">{sb.concept}</div>
-          <div className="storyboard-mood-chip">{sb.moodDirection}</div>
+      {/* Executive Header Banner */}
+      <div className="storyboard-hero-card">
+        <div className="storyboard-hero-top">
+          <div className="storyboard-badge-group">
+            <span className="storyboard-type-tag">PRODUCTION BLUEPRINT</span>
+            <span className="storyboard-status-tag">
+              <span className="status-dot" />
+              {progress === 100 ? "FULLY BUILT" : `${builtCount}/${plannedCount} SCENES READY`}
+            </span>
+          </div>
+          <div className="storyboard-actions">
+            <button className="storyboard-btn secondary" onClick={handleCopy} title="Copy plan summary">
+              {copied ? "✓ Copied" : "📋 Copy"}
+            </button>
+            <button className="storyboard-btn primary" onClick={handleDownload} title="Export Markdown storyboard">
+              <svg width="13" height="13" viewBox="0 0 16 16" fill="currentColor">
+                <path d="M8 12l-4-4h2.5V3h3v5H12L8 12z" />
+                <rect x="2" y="13" width="12" height="1.5" rx="0.75" />
+              </svg>
+              Export .md
+            </button>
+          </div>
+        </div>
+
+        <h2 className="storyboard-main-title">{sb.title}</h2>
+
+        <div className="storyboard-concept-box">
+          <div className="storyboard-concept-label">CORE CONCEPT & DIRECTION</div>
+          <p className="storyboard-concept-text">{sb.concept}</p>
+        </div>
+
+        <div className="storyboard-meta-grid">
+          <div className="storyboard-meta-card">
+            <span className="meta-card-icon">🎨</span>
+            <div>
+              <div className="meta-card-label">Mood & Aesthetic</div>
+              <div className="meta-card-val">{sb.moodDirection}</div>
+            </div>
+          </div>
+
           {sb.narrativeArc && (
-            <div className="storyboard-arc">
-              <span className="storyboard-arc-label">Arc</span>
-              {sb.narrativeArc}
+            <div className="storyboard-meta-card">
+              <span className="meta-card-icon">🎭</span>
+              <div>
+                <div className="meta-card-label">Narrative Arc</div>
+                <div className="meta-card-val">{sb.narrativeArc}</div>
+              </div>
             </div>
           )}
         </div>
-        <button className="storyboard-download-btn" onClick={handleDownload} title="Download storyboard as Markdown">
-          <svg width="14" height="14" viewBox="0 0 16 16" fill="currentColor">
-            <path d="M8 12l-4-4h2.5V3h3v5H12L8 12z" />
-            <rect x="2" y="13" width="12" height="1.5" rx="0.75" />
-          </svg>
-          Export
+
+        {/* Progress Tracker Bar */}
+        <div className="storyboard-progress-container">
+          <div className="storyboard-progress-info">
+            <span>Composition Build Progress</span>
+            <span>{progress}% Completed ({builtCount} of {plannedCount} scenes)</span>
+          </div>
+          <div className="storyboard-progress-track">
+            <div className="storyboard-progress-fill" style={{ width: `${progress}%` }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Scene Production List Header */}
+      <div className="storyboard-scenes-header">
+        <div className="storyboard-scenes-title">
+          <span>SCENE BREAKDOWN</span>
+          <span className="scene-count-pill">{sb.scenes.length} Scenes</span>
+        </div>
+        <button
+          className="storyboard-toggle-all-btn"
+          onClick={() => setExpandedIdx(expandedIdx === null ? 0 : null)}
+        >
+          {expandedIdx === null ? "Expand First" : "Collapse All"}
         </button>
       </div>
 
-      {/* Build Progress */}
-      <div className="storyboard-progress-row">
-        <span className="storyboard-progress-label">
-          {builtCount} / {plannedCount} scenes built
-        </span>
-        <div className="storyboard-progress-bar">
-          <div className="storyboard-progress-fill" style={{ width: `${progress}%` }} />
-        </div>
-        <span className="storyboard-progress-pct">{progress}%</span>
-      </div>
-
-      {/* Scene Cards */}
-      <div className="storyboard-scenes">
+      {/* Scene Cards List */}
+      <div className="storyboard-scenes-list">
         {sb.scenes.map((scene, i) => {
           const isExpanded = expandedIdx === i;
-          const isBuilt = i < builtCount;
+          const matchingScene = composition.scenes[i];
+          const isBuilt = Boolean(matchingScene);
+
           return (
             <div
               key={i}
-              className={`storyboard-scene-card ${isExpanded ? "expanded" : ""} ${isBuilt ? "built" : ""}`}
-              onClick={() => setExpandedIdx(isExpanded ? null : i)}
+              className={`storyboard-card-v2 ${isExpanded ? "expanded" : ""} ${isBuilt ? "is-built" : ""}`}
             >
-              <div className="storyboard-scene-header">
-                <div className="storyboard-scene-badge">
+              {/* Card Header Bar */}
+              <div
+                className="storyboard-card-header-v2"
+                onClick={() => setExpandedIdx(isExpanded ? null : i)}
+              >
+                <div className="card-left-group">
+                  <div className={`scene-index-badge ${isBuilt ? "built" : ""}`}>
+                    {isBuilt ? "✓" : i + 1}
+                  </div>
+                  <div className="scene-title-group">
+                    <div className="scene-name-text">
+                      Scene {i + 1}: {scene.name}
+                    </div>
+                    <div className="scene-purpose-text">{scene.purpose}</div>
+                  </div>
+                </div>
+
+                <div className="card-right-group">
                   {isBuilt ? (
-                    <svg width="12" height="12" viewBox="0 0 12 12" fill="#22c55e">
-                      <path d="M2 6l3 3 5-5" stroke="#22c55e" strokeWidth="1.5" fill="none" strokeLinecap="round"/>
-                    </svg>
+                    <span className="scene-built-pill">✓ Built</span>
                   ) : (
-                    <span className="storyboard-scene-num">{i + 1}</span>
+                    <span className="scene-pending-pill">⏳ Planned</span>
                   )}
-                </div>
-                <div className="storyboard-scene-info">
-                  <div className="storyboard-scene-name">{scene.name}</div>
-                  <div className="storyboard-scene-purpose">{scene.purpose}</div>
-                </div>
-                <div className="storyboard-scene-chevron">
-                  <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor"
-                    style={{ transform: isExpanded ? "rotate(180deg)" : "none", transition: "transform 150ms" }}>
-                    <path d="M2 4l4 4 4-4H2z" />
-                  </svg>
+
+                  {isBuilt && matchingScene && onSelectScene && (
+                    <button
+                      className="scene-select-btn"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelectScene(matchingScene.id);
+                      }}
+                      title="Select in editor"
+                    >
+                      Jump
+                    </button>
+                  )}
+
+                  <span className={`chevron-icon ${isExpanded ? "open" : ""}`}>
+                    <svg width="12" height="12" viewBox="0 0 12 12" fill="currentColor">
+                      <path d="M2 4l4 4 4-4H2z" />
+                    </svg>
+                  </span>
                 </div>
               </div>
 
+              {/* Card Body Details */}
               {isExpanded && (
-                <div className="storyboard-scene-body">
+                <div className="storyboard-card-body-v2">
                   {scene.contentNotes && (
-                    <StoryboardField icon="📝" label="Content Notes" value={scene.contentNotes} />
+                    <div className="detail-section highlight">
+                      <div className="detail-label">📝 Content & Facts</div>
+                      <div className="detail-content">{scene.contentNotes}</div>
+                    </div>
                   )}
+
                   {scene.keyElements && (
-                    <StoryboardField icon="🎨" label="Key Elements" value={scene.keyElements} />
+                    <div className="detail-section">
+                      <div className="detail-label">🎨 Key Visual Elements</div>
+                      <div className="detail-content">{scene.keyElements}</div>
+                    </div>
                   )}
-                  {scene.animationNote && (
-                    <StoryboardField icon="✨" label="Animation" value={scene.animationNote} />
-                  )}
-                  {scene.transitionNote && (
-                    <StoryboardField icon="🔀" label="Transition In" value={scene.transitionNote} />
-                  )}
-                  {scene.narrativeBeat && (
-                    <StoryboardField icon="📖" label="Narrative Beat" value={scene.narrativeBeat} />
-                  )}
+
+                  <div className="detail-row-grid">
+                    {scene.animationNote && (
+                      <div className="detail-chip-card">
+                        <span className="chip-icon">✨</span>
+                        <div>
+                          <div className="chip-title">Animation</div>
+                          <div className="chip-desc">{scene.animationNote}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {scene.transitionNote && (
+                      <div className="detail-chip-card">
+                        <span className="chip-icon">🔀</span>
+                        <div>
+                          <div className="chip-title">Transition In</div>
+                          <div className="chip-desc">{scene.transitionNote}</div>
+                        </div>
+                      </div>
+                    )}
+
+                    {scene.narrativeBeat && (
+                      <div className="detail-chip-card">
+                        <span className="chip-icon">📖</span>
+                        <div>
+                          <div className="chip-title">Narrative Beat</div>
+                          <div className="chip-desc">{scene.narrativeBeat}</div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
                 </div>
               )}
             </div>
@@ -163,11 +278,3 @@ export const StoryboardPanel: React.FC<StoryboardPanelProps> = ({ composition })
   );
 };
 
-const StoryboardField: React.FC<{ icon: string; label: string; value: string }> = ({ icon, label, value }) => (
-  <div className="storyboard-field">
-    <div className="storyboard-field-label">
-      {icon} {label}
-    </div>
-    <div className="storyboard-field-value">{value}</div>
-  </div>
-);
