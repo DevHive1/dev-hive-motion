@@ -26,6 +26,7 @@ export const ImageElement: React.FC<{ element: ImageElementType; frame: number }
         height: `${element.height}%`,
         borderRadius: element.borderRadius,
         boxShadow: element.boxShadow,
+        mixBlendMode: element.mixBlendMode as React.CSSProperties["mixBlendMode"],
         zIndex: element.zIndex,
         ...styleToCss(animated),
       }}

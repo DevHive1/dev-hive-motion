@@ -27,6 +27,7 @@ export const TextElement: React.FC<{ element: TextElementType; frame: number }> 
             : element.textAlign === "right"
               ? "flex-end"
               : "center",
+        mixBlendMode: element.mixBlendMode as React.CSSProperties["mixBlendMode"],
         zIndex: element.zIndex,
         ...styleToCss(animated),
       }}

@@ -13,7 +13,15 @@ export const AnimatableProperty = z.enum([
   "rotation",
 ]);
 
-export const Easing = z.enum(["linear", "easeIn", "easeOut", "easeInOut"]);
+export const Easing = z.enum([
+  "linear",
+  "easeIn",
+  "easeOut",
+  "easeInOut",
+  "spring",    // Overshoot then settle — great for icon pops
+  "bounce",    // Bounces at the end like a ball hitting the floor
+  "elastic",   // Snaps past target and oscillates back
+]);
 
 export const AnimationSchema = z.object({
   id: z.string(),
@@ -23,7 +31,19 @@ export const AnimationSchema = z.object({
   startFrame: z.number().min(0),
   durationInFrames: z.number().min(1),
   easing: Easing.default("easeInOut"),
+  // Loop support: loop:true repeats the animation indefinitely within the element's duration.
+  // loopCount: 0 = infinite, N = repeat N times after the first play.
+  loop: z.boolean().default(false),
+  loopCount: z.number().int().min(0).default(0),
 });
+
+// CSS mix-blend-mode values available for layering effects
+export const BlendMode = z.enum([
+  "normal", "multiply", "screen", "overlay",
+  "darken", "lighten", "color-dodge", "color-burn",
+  "hard-light", "soft-light", "difference", "exclusion",
+  "hue", "saturation", "color", "luminosity",
+]);
 
 const BaseElementFields = {
   id: z.string(),
@@ -40,6 +60,8 @@ const BaseElementFields = {
   animations: z.array(AnimationSchema).default([]),
   locked: z.boolean().default(false),
   hidden: z.boolean().default(false),
+  // CSS mix-blend-mode for compositing with layers below
+  mixBlendMode: BlendMode.optional(),
 };
 
 export const GradientSchema = z.object({

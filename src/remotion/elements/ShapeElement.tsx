@@ -28,6 +28,7 @@ export const ShapeElement: React.FC<{ element: ShapeElementType; frame: number }
         backdropFilter: element.backdropBlurPx > 0 ? `blur(${element.backdropBlurPx}px)` : undefined,
         WebkitBackdropFilter: element.backdropBlurPx > 0 ? `blur(${element.backdropBlurPx}px)` : undefined,
         boxShadow: element.boxShadow,
+        mixBlendMode: element.mixBlendMode as React.CSSProperties["mixBlendMode"],
         zIndex: element.zIndex,
         ...styleToCss(animated),
       }}

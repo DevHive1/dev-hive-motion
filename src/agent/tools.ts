@@ -23,6 +23,8 @@ import { checkContrast } from "./providers/contrast";
 import { generateImage } from "./providers/pollinations";
 import { generateVoiceover } from "./providers/edgeTts";
 import { searchFreeMusic } from "./providers/jamendo";
+import { searchSoundEffects } from "./providers/freesound";
+import { jinaReadUrl } from "./providers/jinaReader";
 import { computeLayoutFlags, type LayoutBox } from "./layoutCheck";
 import { setOrientationDef, setOrientationImpl } from "./tools/orientation";
 import { reorderScenesDef, reorderScenesImpl } from "./tools/scene/reorder";
@@ -298,8 +300,11 @@ export const toolDefinitions = [
           durationInFrames: { type: "number" },
           easing: {
             type: "string",
-            enum: ["linear", "easeIn", "easeOut", "easeInOut"],
+            enum: ["linear", "easeIn", "easeOut", "easeInOut", "spring", "bounce", "elastic"],
+            description: "spring=overshoots then settles (icon pops, badges). bounce=hits target then rebounds (playful). elastic=snaps past and oscillates (attention-grabbing). easeOut=default smooth decel.",
           },
+          loop: { type: "boolean", description: "Repeat this animation indefinitely or N times within the element's lifetime. Great for pulse/spin/breathe effects." },
+          loopCount: { type: "number", description: "0=infinite (default when loop:true), N=repeat N extra times after the first play." },
         },
         required: ["sceneId", "elementId", "property", "from", "to", "startFrame", "durationInFrames"],
       },
@@ -471,7 +476,9 @@ export const toolDefinitions = [
                       to: { type: "number" },
                       startFrame: { type: "number" },
                       durationInFrames: { type: "number" },
-                      easing: { type: "string", enum: ["linear", "easeIn", "easeOut", "easeInOut"] },
+                      easing: { type: "string", enum: ["linear", "easeIn", "easeOut", "easeInOut", "spring", "bounce", "elastic"] },
+                      loop: { type: "boolean" },
+                      loopCount: { type: "number" },
                     },
                     required: ["property", "from", "to", "startFrame", "durationInFrames"],
                   },
@@ -683,7 +690,7 @@ export const toolDefinitions = [
     function: {
       name: "fetch_page_content",
       description:
-        "Read the full text of a specific web page (e.g. one found via web_search) when a search snippet isn't enough detail. Returns cleaned readable text, not raw HTML.",
+        "Read the full text of a specific web page — including JS-rendered sites, React/Next.js apps, news articles, and product pages — via Jina.ai Reader (free). Returns clean Markdown, not raw HTML. Use when a search snippet isn't enough detail. Falls back to static scraping if Jina is unavailable.",
       parameters: {
         type: "object",
         properties: { url: { type: "string" } },
@@ -1458,7 +1465,13 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
   },
 
   async fetch_page_content(args: { url: string }) {
-    return fetchPageContent(args.url);
+    // Try Jina Reader first — handles JS-rendered SPAs and returns clean markdown.
+    // Falls back to the raw cheerio scraper if Jina times out or errors.
+    try {
+      return await jinaReadUrl(args.url);
+    } catch {
+      return fetchPageContent(args.url);
+    }
   },
 
   async check_contrast(args: { foreground: string; background: string }) {
@@ -1507,9 +1520,18 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
     return { elementId: element.id };
   },
 
+  // ─── find_sound_effect definition (toolDefinitions array) lives in the big
+  //     const above; the implementation is registered here:
   async search_free_music(args: { query: string; limit?: number }) {
     const tracks = await searchFreeMusic(args.query, args.limit ?? 5);
     return { tracks };
+  },
+
+  async find_sound_effect(args: { query: string; maxDuration?: number; limit?: number }) {
+    const sounds = await searchSoundEffects(args.query, args.limit ?? 6, {
+      maxDuration: args.maxDuration,
+    });
+    return { sounds };
   },
 
   async set_orientation(args: any) {

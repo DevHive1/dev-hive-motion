@@ -25,6 +25,7 @@ export const VideoElement: React.FC<{ element: VideoElementType; frame: number }
         width: `${element.width}%`,
         height: `${element.height}%`,
         overflow: "hidden",
+        mixBlendMode: element.mixBlendMode as React.CSSProperties["mixBlendMode"],
         zIndex: element.zIndex,
         ...styleToCss(animated),
       }}
