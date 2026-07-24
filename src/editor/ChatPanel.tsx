@@ -58,6 +58,15 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 }) => {
   const logEndRef = useRef<HTMLDivElement>(null);
 
+  // Auto-scroll to the end of chat on mount and when log changes
+  React.useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "auto" });
+  }, []);
+
+  React.useEffect(() => {
+    logEndRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [log.length, busy]);
+
   return (
     <div className="chat">
       {log.length > 0 && (
