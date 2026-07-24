@@ -1,3 +1,0 @@
-- [Remotion version policy](remotion-version-policy.md) — always use remotion 4.0.497+; 4.0.290 is blocked by Replit firewall (Critical CVE).
-- [WebSocket real-time arch](ws-realtime-arch.md) — server uses ws over http.createServer(app); broadcasts {type,composition,canUndo,canRedo} on every compositionStore.onChange; SSE kept for backward compat.
-- [Audit improvements map](audit-improvements.md) — all 10 audit items (#1–10, #13–14) implemented; ws package required; JAMENDO_CLIENT_ID optional for music search.
