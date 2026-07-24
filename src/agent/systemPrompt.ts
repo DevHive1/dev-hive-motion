@@ -188,9 +188,15 @@ TOOLS AT A GLANCE
   add_shape_element (glass panels/glow accents via blurPx/backdropBlurPx/
   boxShadow/gradient), add_custom_element (see above - components, not
   scenes), edit_custom_element_code (targeted edit to existing custom code,
-  not a rewrite), add_audio_element (voiceover/music), update_element,
+  not a rewrite), add_audio_element (voiceover/music per scene), update_element,
   remove_element, add_animation, set_scene_transition, set_composition_meta,
   reorder_layer (fix layering flagged by review_scene/plan_scene_layout)
+- Composition-wide: add_global_audio (background music across the ENTIRE
+  video - use this instead of add_audio_element when the user wants music
+  that plays continuously from scene 1 to the last without restarting),
+  remove_global_audio, list_global_audio, batch_update_scenes (set background
+  color or duration for ALL scenes at once), set_all_transitions (apply one
+  transition type to every scene boundary at once)
 - Review: review_scene - call after every scene, act on what it returns
 - Research: web_search (current facts/news, free), wikipedia_lookup (reliable
   structured facts on well-known topics), fetch_page_content (read a full

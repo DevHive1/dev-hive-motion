@@ -769,9 +769,65 @@ export const toolDefinitions = [
   {
     type: "function",
     function: {
+      name: "add_global_audio",
+      description:
+        "Add a background music or audio track that plays continuously across the ENTIRE video composition (across all scenes), without restarting on scene changes.",
+      parameters: {
+        type: "object",
+        properties: {
+          src: { type: "string", description: "Direct MP3/audio URL from search_free_music, generate_voiceover, or check_url." },
+          volume: { type: "number", description: "Volume level 0-1 (default 0.4 for background music under voiceover)." },
+          startFrame: { type: "number", description: "Composition frame to start playing at (default 0)." },
+          durationInFrames: { type: "number", description: "Duration in frames to play. Defaults to full video length." },
+          name: { type: "string", description: "Descriptive name, e.g. 'Background Music'." },
+        },
+        required: ["src"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "remove_global_audio",
+      description: "Remove a global background audio track by ID.",
+      parameters: {
+        type: "object",
+        properties: {
+          audioId: { type: "string", description: "ID of global audio track to remove." },
+        },
+        required: ["audioId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "list_global_audio",
+      description: "List all active global audio tracks (background music / composition-wide audio).",
+      parameters: { type: "object", properties: {} },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "batch_update_scenes",
+      description:
+        "Apply changes across ALL scenes in the composition at once (e.g. set background color or frame duration for all scenes).",
+      parameters: {
+        type: "object",
+        properties: {
+          backgroundColor: { type: "string", description: "Hex/CSS background color to apply to all scenes (e.g. '#0a0e27')." },
+          durationInFrames: { type: "number", description: "Duration in frames to set for all scenes (e.g. 150)." },
+        },
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "search_free_music",
       description:
-        "Search for free, Creative Commons–licensed background music tracks (Jamendo) by genre or mood. Returns direct MP3 URLs ready to use with add_audio_element. Requires JAMENDO_CLIENT_ID in .env — if not configured, this tool errors with clear instructions. Good queries: 'cinematic epic', 'calm ambient', 'upbeat corporate', 'lo-fi study', 'dramatic orchestral'.",
+        "Search for free, Creative Commons–licensed background music tracks (Jamendo) by genre or mood. Returns direct MP3 URLs ready to use with add_audio_element or add_global_audio. Requires JAMENDO_CLIENT_ID in .env — if not configured, this tool errors with clear instructions. Good queries: 'cinematic epic', 'calm ambient', 'upbeat corporate', 'lo-fi study', 'dramatic orchestral'.",
       parameters: {
         type: "object",
         properties: {
@@ -785,6 +841,7 @@ export const toolDefinitions = [
       },
     },
   },
+  setAllTransitionsDef,
 ] as const;
 
 function findScene(scenes: Scene[], sceneId: string): Scene {
@@ -1521,6 +1578,71 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
     };
     await addElementToScene(args.sceneId, element);
     return { elementId: element.id };
+  },
+
+  async add_global_audio(args: {
+    src: string;
+    volume?: number;
+    startFrame?: number;
+    durationInFrames?: number;
+    name?: string;
+  }) {
+    if (!args.src) throw new Error("add_global_audio: src is required.");
+    let elementId = "";
+    await sceneStore.update((draft) => {
+      const totalFrames = draft.scenes.reduce((sum, s) => sum + s.durationInFrames, 0);
+      const track: AudioElement = {
+        id: `global-audio-${nanoid(6)}`,
+        type: "audio",
+        name: args.name ?? "Global Audio",
+        src: args.src,
+        volume: args.volume ?? 0.4,
+        x: 0,
+        y: 0,
+        width: 0,
+        height: 0,
+        rotation: 0,
+        opacity: 1,
+        zIndex: 0,
+        startFrame: args.startFrame ?? 0,
+        durationInFrames: args.durationInFrames ?? Math.max(150, totalFrames),
+        animations: [],
+        locked: false,
+        hidden: false,
+        muted: false,
+      };
+      if (!draft.globalAudio) draft.globalAudio = [];
+      draft.globalAudio.push(track);
+      elementId = track.id;
+      return draft;
+    });
+    return { success: true, audioId: elementId };
+  },
+
+  async remove_global_audio(args: { audioId: string }) {
+    await sceneStore.update((draft) => {
+      if (draft.globalAudio) {
+        draft.globalAudio = draft.globalAudio.filter((a) => a.id !== args.audioId);
+      }
+      return draft;
+    });
+    return { success: true };
+  },
+
+  async list_global_audio() {
+    const composition = sceneStore.get();
+    return { globalAudio: composition.globalAudio ?? [] };
+  },
+
+  async batch_update_scenes(args: { backgroundColor?: string; durationInFrames?: number }) {
+    await sceneStore.update((draft) => {
+      draft.scenes.forEach((scene) => {
+        if (args.backgroundColor) scene.backgroundColor = args.backgroundColor;
+        if (args.durationInFrames && args.durationInFrames > 0) scene.durationInFrames = args.durationInFrames;
+      });
+      return draft;
+    });
+    return { success: true, sceneCount: sceneStore.get().scenes.length };
   },
 
   // ─── find_sound_effect definition (toolDefinitions array) lives in the big
