@@ -587,6 +587,15 @@ function summarizeResult(payload: unknown, toolName?: string): string {
         return count === 0 ? "all clean" : `${count} flag${count === 1 ? "" : "s"}`;
       }
     }
+    if (toolName === "diagnose_scene") {
+      if (typeof obj.headline === "string") {
+        const errors = Array.isArray(obj.issues)
+          ? (obj.issues as unknown[]).filter((i) => (i as Record<string, unknown>).severity === "error").length
+          : 0;
+        if (errors === 0) return obj.headline;
+        return `${obj.headline} (${errors} error${errors === 1 ? "" : "s"})`;
+      }
+    }
     if (toolName === "plan_scene_layout") {
       if (Array.isArray(obj.resolvedElements)) {
         const arr = obj.resolvedElements as unknown[];

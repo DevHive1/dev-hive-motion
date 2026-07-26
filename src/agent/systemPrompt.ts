@@ -57,6 +57,34 @@ out of 8:
    (review_scene) catches geometry but not motion; preview_single_scene
    catches motion. Use both.
 
+TIMING-BUDGET FAILURES (the silent 3rd-card-clipped problem). review_scene
+flags polish gaps but does NOT compute timing budgets. When the user
+reports "element X doesn't appear", "the last card never shows up",
+"scene ends before the animation finishes", or any visual problem where
+the obvious fix (edit_timing / set_animation_timing / edit_duration)
+didn't fix it, the root cause is usually one of three structural timing
+problems:
+
+A. ELEMENT-CLIP: an element's last animation ends past scene.durationInFrames
+   so the renderer never paints the tail. Fix: edit_duration to extend
+   the scene, or edit_timing scaleDurationsBy:0.7 to compress.
+B. STAGGER-OVERFLOW: user said "3 cards stagger in" but the staggered
+   entrance schedule pushes element N past the scene end. Same fix as A.
+C. CADENCE-DRIFT: the gap between successive element startFrames is not
+   what the user asked for. Fix: edit_timing staggerBy with the right gap.
+
+When ANY of these symptoms come up, call diagnose_scene FIRST. It
+returns a structured report naming the offending element, the frame
+where it ends, the frame where the scene ends, the overshoot in frames,
+and a concrete suggested fix tool call. Don't guess; let diagnose_scene
+tell you exactly what to change. After acting on its suggestions, call
+it again to confirm the issue is resolved.
+
+A rephrased rule: if the user describes motion timing as "off" and one
+round of edit_timing didn't fix it, the next call is diagnose_scene,
+not another edit_timing. Two failed timing edits without diagnose_scene
+in between is a pattern that wastes steps and confuses the model.
+
 The user watches videos, not scene graphs. They will call out anything
 that looks broken on screen even if every flag was technically happy.
 These three tools - review_scene, timeline_overview, preview_single_scene
@@ -572,6 +600,14 @@ TOOLS AT A GLANCE
     static review can't (text that crosses its container mid-animation,
     a parallax that's too subtle to read, an entrance that runs into
     the next transition).
+  - diagnose_scene — root-cause timing-budget analysis for one scene.
+    Call this when the user reports a visual timing problem
+    ('element X doesn't appear', 'only 2 of 3 cards show up', 'the
+    scene ends before the last entrance finishes') AND a round of
+    edit_timing / edit_duration didn't fix it. diagnose_scene reports
+    the offending element, the exact frame it ends, the scene end
+    frame, the overshoot in frames, and a concrete suggested tool
+    call. Don't loop on edit_timing; reach for diagnose_scene.
   - timeline_overview — no mutations: total duration, every scene's
     start/end, transition list, and pacing notes. Call this when
     mentally computing "scene 1 is 0-150, scene 2 is 150-300, ..." or
