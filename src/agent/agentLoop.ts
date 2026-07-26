@@ -100,6 +100,20 @@ export async function runAgent(
   let storyboardNudgeIssued = false;
   let firstLayoutNudgeIssued = false;
 
+  // Sequential-thinking → action pairing tracker. The user pointed out
+  // that the model often ended a thinking chain with `nextThoughtNeeded:
+  // false` and then immediately stopped — without doing anything. Now
+  // when the agent declares "done" or sends another tool call while a
+  // pending action hint from sequential_thinking is sitting in context,
+  // we nudge it to actually execute the action and report back before
+  // closing the loop. We only track the most-recent
+  // sequential_thinking call (not every step), because early steps in
+  // a chain are exploratory — only the final step is a commitment.
+  let lastSequentialThought: { thought: string; nextStep: Array<{ tool: string; reason: string }>; chainLength: number } | null = null;
+  let actedSinceLastThought = true; // start true so we don't nudge the very first iteration
+  let actOnThoughtNudgesIssued = 0;
+  const MAX_ACT_ON_THOUGHT_NUDGES = 1;
+
   const pushReviewNudge = () => {
     const ids = [...unReviewedScenes];
     if (ids.length === 0) return false;
@@ -191,6 +205,53 @@ export async function runAgent(
     const toolCalls = message.tool_calls ?? [];
 
     if (toolCalls.length === 0) {
+      // Sequential-thinking → action pairing gate. The model ends a
+      // thinking chain (`sequential_thinking` with
+      // `nextThoughtNeeded:false`) and the tool returns concrete
+      // next-step suggestions. If the agent then immediately tries to
+      // declare done WITHOUT calling one of those tools (or another
+      // action tool), the user sees an answer that's untethered from
+      // the proposed action. We push a system-reminder asking the
+      // model to actually execute the action and see what happened
+      // before declaring finished. We nudge at most
+      // MAX_ACT_ON_THOUGHT_NUDGES times per loop.
+      //
+      // Edge case: if the model's reasoning yielded ZERO suggestions
+      // (nextStep empty) — e.g. the user asked a pure research question
+      // and the model decided "I have enough, no action needed" — we
+      // skip the nudge. Acting on nothing is the right answer in that
+      // case, and our nudge would only confuse the model.
+      if (
+        lastSequentialThought !== null &&
+        !actedSinceLastThought &&
+        actOnThoughtNudgesIssued < MAX_ACT_ON_THOUGHT_NUDGES &&
+        lastSequentialThought.nextStep.length > 0
+      ) {
+        const last = lastSequentialThought!;
+        const suggestionLines = last.nextStep.slice(0, 3).map((s) => `  - ${s.tool}: ${s.reason}`);
+        messages.push({
+          role: "user",
+          content:
+            `[SYSTEM REMINDER - ACT ON YOUR REASONING] You just finished a sequential_thinking chain ` +
+            `(thought ${last.chainLength}, "${last.thought.slice(0, 200)}${last.thought.length > 200 ? "..." : ""}") with ` +
+            `${last.nextStep.length} suggested next step${last.nextStep.length === 1 ? "" : "s"},\n` +
+            `but you have not yet actually executed any action since then. The user expects you to:\n` +
+            `  1. Call one of the suggested tools (or a better one your reasoning implied)\n` +
+            `  2. See what the tool returned\n` +
+            `  3. THEN end your reply with a short status to the user\n\n` +
+            (suggestionLines.length > 0 ? `Suggested next steps from your own reasoning:\n${suggestionLines.join("\n")}\n\n` : "") +
+            `Please act on this reasoning now, THEN summarize for the user when you're done.`,
+        });
+        actOnThoughtNudgesIssued++;
+        // Surface to the user-facing chat log as well, so they see
+        // the agent was nudged back into action. Keeps the chain-to-
+        // action pairing visible in the UI.
+        onEvent({
+          type: "thinking",
+          text: `[Sequential thinking closed] The agent ended a thinking chain (thought ${last.chainLength}) but had not yet acted on the suggestion. Nudging it to execute the proposed next step before declaring done.`,
+        });
+        continue;
+      }
       // Agent is trying to declare done - check if every built scene was reviewed.
       // Only nudge if we haven't already nudged MAX_REVIEW_NUDGES times in
       // this loop. If the model ignores two nudges, accept the result and
@@ -279,6 +340,39 @@ export async function runAgent(
           if (name === "plan_scene_layout" && !firstLayoutNudgeIssued) {
             firstLayoutNudgeIssued = true;
             pushSequentialThinkingNudge("layout");
+          }
+          // Sequential-thinking → action pairing. When the model ends a
+          // thinking chain with nextThoughtNeeded:false, we capture the
+          // committed thought + its suggested next steps. The flag
+          // "actedSinceLastThought" is cleared here, then re-set when
+          // any non-sequential_thinking tool call succeeds (or when we
+          // see the response of one). Until then, our done-attempt
+          // gate will remind the model to actually execute before
+          // declaring finished.
+          if (name === "sequential_thinking") {
+            const nextNeeded = (args.nextThoughtNeeded as boolean | undefined) === false;
+            if (nextNeeded) {
+              const recorded = result.recorded as Record<string, unknown> | undefined;
+              const recordedThought = recorded && typeof recorded.thought === "string"
+                ? recorded.thought
+                : typeof args.thought === "string"
+                  ? args.thought
+                  : "";
+              const nextSteps = Array.isArray(result.nextStep)
+                ? (result.nextStep as Array<Record<string, unknown>>)
+                    .filter((s) => s && typeof s.tool === "string")
+                    .map((s) => ({ tool: String(s.tool), reason: String(s.reason ?? "") }))
+                : [];
+              lastSequentialThought = {
+                thought: recordedThought,
+                nextStep: nextSteps,
+                chainLength: typeof result.chainLength === "number" ? (result.chainLength as number) : 0,
+              };
+              actedSinceLastThought = false;
+            }
+          } else {
+            // Any other successful tool call counts as "acted".
+            actedSinceLastThought = true;
           }
         }
       } catch (err) {

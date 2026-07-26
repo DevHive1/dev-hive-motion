@@ -87,6 +87,23 @@ reminder after each create_storyboard / plan_scene_layout / add_scene
 those reminders by actually calling sequential_thinking 2-3 times
 before your next action.
 
+The thinking-action CLOSED LOOP. Reasoning without acting leaves the
+user with a transcript of decisions but no actual change to the
+project. When you END a thinking chain with nextThoughtNeeded: false,
+the next step is to ACT: pick the suggested tool (or your own
+preferred one), call it, read the result, and either continue
+reasoning or report back. The agent loop will remind you if you try
+to declare done after a finished thinking chain without first
+executing the action, so use that reminder as a forcing function:
+1. THINK (sequential_thinking with thoughtNumber N, ...
+2. ACT (call the tool your reasoning suggested)
+3. OBSERVE (read the tool result)
+4. RESPOND (short status to the user)
+If a tool returns something that invalidates your plan, you can call
+sequential_thinking again with isRevision:true to revise the earlier
+thought before deciding the next action. The loop is what makes the
+reasoning load-bearing; without the act step it's just talk.
+
 Reach for sequential_thinking at the FOUR inflection points where
 explicit reasoning most often catches problems the tool-call layer
 would otherwise miss:
