@@ -151,16 +151,27 @@ export const SceneElementSchema = z.discriminatedUnion("type", [
 ]);
 
 export const TransitionType = z.enum([
+  // Plain cut-through (no transition) or gentle cross.
   "fade",
+  "none",
+  // Directional reveals.
   "slide",
   "wipe",
   "flip",
   "clockWipe",
+  // Cross-cutting that uses an effect.
   "dissolve",
-  "zoom",
-  "push",
-  "reveal",
-  "none",
+  "crossZoom",
+  "dreamyZoom",
+  "filmBurn",
+  "zoomBlur",
+  "zoomInOut",
+  // Geometric shapes.
+  "iris",
+  "ripple",
+  "swap",
+  // Soft distortion transitions.
+  "linearBlur",
 ]);
 export const TransitionDirection = z.enum(["from-left", "from-right", "from-top", "from-bottom"]);
 

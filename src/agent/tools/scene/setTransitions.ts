@@ -16,7 +16,7 @@
 import { sceneStore } from "../../../server/sceneStore";
 import type { Transition } from "../../../schema/scene";
 
-export type TransitionType = "fade" | "slide" | "wipe" | "flip" | "clockWipe" | "none";
+export type TransitionType = "fade" | "none" | "slide" | "wipe" | "flip" | "clockWipe" | "dissolve" | "crossZoom" | "dreamyZoom" | "filmBurn" | "zoomBlur" | "zoomInOut" | "iris" | "ripple" | "swap" | "linearBlur";
 export type TransitionDirection = "from-left" | "from-right" | "from-top" | "from-bottom";
 
 interface SetSceneTransitionsArgs {
@@ -79,7 +79,7 @@ export const setSceneTransitionsDef = {
           type: "object",
           description: "Inbound transition config. Pass type:'none' to clear. Omit to leave unchanged.",
           properties: {
-            type: { type: "string", enum: ["fade", "slide", "wipe", "flip", "clockWipe", "none"] },
+            type: { type: "string", enum: ["fade", "none", "slide", "wipe", "flip", "clockWipe", "dissolve", "crossZoom", "dreamyZoom", "filmBurn", "zoomBlur", "zoomInOut", "iris", "ripple", "swap", "linearBlur"] },
             direction: { type: "string", enum: ["from-left", "from-right", "from-top", "from-bottom"] },
             durationInFrames: { type: "number" },
           },
@@ -89,7 +89,7 @@ export const setSceneTransitionsDef = {
           type: "object",
           description: "Outbound transition config. Pass type:'none' to clear. Omit to leave unchanged.",
           properties: {
-            type: { type: "string", enum: ["fade", "slide", "wipe", "flip", "clockWipe", "none"] },
+            type: { type: "string", enum: ["fade", "none", "slide", "wipe", "flip", "clockWipe", "dissolve", "crossZoom", "dreamyZoom", "filmBurn", "zoomBlur", "zoomInOut", "iris", "ripple", "swap", "linearBlur"] },
             direction: { type: "string", enum: ["from-left", "from-right", "from-top", "from-bottom"] },
             durationInFrames: { type: "number" },
           },
@@ -99,7 +99,7 @@ export const setSceneTransitionsDef = {
           type: "object",
           description: "Apply this config to BOTH the inbound and outbound transition. Convenience for 'fade in and fade out'.",
           properties: {
-            type: { type: "string", enum: ["fade", "slide", "wipe", "flip", "clockWipe", "none"] },
+            type: { type: "string", enum: ["fade", "none", "slide", "wipe", "flip", "clockWipe", "dissolve", "crossZoom", "dreamyZoom", "filmBurn", "zoomBlur", "zoomInOut", "iris", "ripple", "swap", "linearBlur"] },
             direction: { type: "string", enum: ["from-left", "from-right", "from-top", "from-bottom"] },
             durationInFrames: { type: "number" },
           },

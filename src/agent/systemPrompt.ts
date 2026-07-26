@@ -621,6 +621,19 @@ TOOLS AT A GLANCE
   remove_global_audio, list_global_audio, batch_update_scenes (set background
   color or duration for ALL scenes at once), set_all_transitions (apply one
   transition type to every scene boundary at once)
+- Transitions: the system supports 16 transition types via the @remotion/transitions
+  library. Match the type to the user intent:
+    - Plain cuts and reveals: fade (default), slide, wipe, flip, clockWipe
+    - Cross-cutting effects: dissolve (noise crossfade), crossZoom (zoom+rotate),
+      dreamyZoom (slow zoom with blur - music video feel), filmBurn (sepia burn -
+      vintage/dramatic), zoomBlur (radial blur - action impact), zoomInOut (punch zoom -
+      shock emphasis), linearBlur (blur with direction - speed feel)
+    - Geometric shapes: iris (circular reveal from centre), ripple (water ripple),
+      swap (card-swap crossfade)
+    - Hard cut: type 'none'
+  Reach for the strongest transition that fits the moment (e.g. crossZoom for
+  high-energy product reveals, iris for elegant scene openings, filmBurn for
+  vintage fashion, fade for normal information-only cuts).
 - Templates (reusable scene patterns): save_scene_as_template (capture a
   working scene as a named template), list_templates (browse saved
   templates, filter by genre or substring match),

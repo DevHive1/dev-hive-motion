@@ -6,17 +6,27 @@ interface TransitionPickerProps {
   onChange: (transition: Transition | undefined) => void;
 }
 
+// Curated list shown in the editor's transition picker. Backend schema
+// allows every transition the @remotion/transitions library supports,
+// but the picker surfaces the most-used ones; the agent can still reach
+// all transitions via set_scene_transition / set_scene_transitions.
 const TRANSITION_TYPES: Array<{ type: TransitionType; label: string }> = [
   { type: "fade", label: "Fade" },
+  { type: "none", label: "None (hard cut)" },
   { type: "slide", label: "Slide" },
   { type: "wipe", label: "Wipe" },
   { type: "flip", label: "Flip" },
   { type: "clockWipe", label: "Clock Wipe" },
   { type: "dissolve", label: "Dissolve" },
-  { type: "zoom", label: "Zoom" },
-  { type: "push", label: "Push" },
-  { type: "reveal", label: "Reveal" },
-  { type: "none", label: "None" },
+  { type: "crossZoom", label: "Cross Zoom" },
+  { type: "dreamyZoom", label: "Dreamy Zoom" },
+  { type: "filmBurn", label: "Film Burn" },
+  { type: "zoomBlur", label: "Zoom Blur" },
+  { type: "zoomInOut", label: "Zoom In-Out" },
+  { type: "iris", label: "Iris Wipe" },
+  { type: "ripple", label: "Ripple" },
+  { type: "swap", label: "Swap" },
+  { type: "linearBlur", label: "Linear Blur" },
 ];
 
 export const TransitionPicker: React.FC<TransitionPickerProps> = ({ transition, onChange }) => {

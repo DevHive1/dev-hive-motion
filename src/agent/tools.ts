@@ -370,12 +370,12 @@ export const toolDefinitions = [
     function: {
       name: "set_scene_transition",
       description:
-        "Set how a scene transitions IN from the previous scene (fade, slide, wipe, flip, or clockWipe) instead of a hard cut. Has no effect on the first scene. Use this on every scene after the first for a polished, professional-looking video - vary the type across the project rather than reusing one everywhere.",
+        "Set how a scene transitions IN from the previous scene. Use this when only the inbound side matters; for both sides in one call, prefer set_scene_transitions. Has no effect on the first scene. Available types: fade (default cross-cut), slide (left/right/top/bottom), wipe (clean wipe in a direction), flip (card-flip reveal), clockWipe (radial sweep), dissolve (crossfade-through-noise), crossZoom (zoom-while-rotating - energetic), dreamyZoom (slow-zoom + blur, music-video style), filmBurn (sepia/heat-burn effect), zoomBlur (radial blur - impact feel), zoomInOut (camera punch-zoom - shock emphasis), iris (circular reveal from centre - classic), ripple (water-ripple overlay), swap (crossfade-with-card-swap - playful), linearBlur (blur-with-direction - speed-feel transitions). Vary the type across the project rather than reusing one everywhere.",
       parameters: {
         type: "object",
         properties: {
           sceneId: { type: "string" },
-          type: { type: "string", enum: ["fade", "slide", "wipe", "flip", "clockWipe", "none"] },
+          type: { type: "string", enum: ["fade", "none", "slide", "wipe", "flip", "clockWipe", "dissolve", "crossZoom", "dreamyZoom", "filmBurn", "zoomBlur", "zoomInOut", "iris", "ripple", "swap", "linearBlur"] },
           direction: {
             type: "string",
             enum: ["from-left", "from-right", "from-top", "from-bottom"],
@@ -465,7 +465,7 @@ export const toolDefinitions = [
             type: "object",
             description: "Omit for a hard cut on the first scene.",
             properties: {
-              type: { type: "string", enum: ["fade", "slide", "wipe", "flip", "clockWipe"] },
+              type: { type: "string", enum: ["fade", "slide", "wipe", "flip", "clockWipe", "dissolve", "crossZoom", "dreamyZoom", "filmBurn", "zoomBlur", "zoomInOut", "iris", "ripple", "swap", "linearBlur", "none", "dissolve", "crossZoom", "dreamyZoom", "filmBurn", "zoomBlur", "zoomInOut", "iris", "ripple", "swap", "linearBlur", "none"] },
               direction: {
                 type: "string",
                 enum: ["from-left", "from-right", "from-top", "from-bottom"],
@@ -892,7 +892,7 @@ export const toolDefinitions = [
             type: "object",
             description: "Apply the same transition to every scene boundary (or every scene except the first if skipFirst is true). type 'none' clears the transition on those scenes.",
             properties: {
-              type: { type: "string", enum: ["fade", "slide", "wipe", "flip", "clockWipe", "none"] },
+              type: { type: "string", enum: ["fade", "none", "slide", "wipe", "flip", "clockWipe", "dissolve", "crossZoom", "dreamyZoom", "filmBurn", "zoomBlur", "zoomInOut", "iris", "ripple", "swap", "linearBlur"] },
               direction: { type: "string", enum: ["from-left", "from-right", "from-top", "from-bottom"] },
               durationInFrames: { type: "number" },
             },
@@ -1379,7 +1379,8 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
 
   async set_scene_transition(args: {
     sceneId: string;
-    type: "fade" | "slide" | "wipe" | "flip" | "clockWipe" | "none";
+    type: "fade" | "none" | "slide" | "wipe" | "flip" | "clockWipe" | "dissolve" | "crossZoom" | "dreamyZoom" | "filmBurn" | "zoomBlur" | "zoomInOut" | "iris" | "ripple" | "swap" | "linearBlur";
+
     direction?: "from-left" | "from-right" | "from-top" | "from-bottom";
     durationInFrames?: number;
   }) {
@@ -1463,7 +1464,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
     durationInFrames: number;
     backgroundColor?: string;
     transitionIn?: {
-      type: "fade" | "slide" | "wipe" | "flip" | "clockWipe";
+      type: "fade" | "slide" | "wipe" | "flip" | "clockWipe" | "dissolve" | "crossZoom" | "dreamyZoom" | "filmBurn" | "zoomBlur" | "zoomInOut" | "iris" | "ripple" | "swap" | "linearBlur" | "none";
       direction?: Transition["direction"];
       durationInFrames?: number;
     };
@@ -1882,7 +1883,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
     backgroundColor?: string;
     durationInFrames?: number;
     transitionIn?: {
-      type: "fade" | "slide" | "wipe" | "flip" | "clockWipe" | "none";
+      type: "fade" | "none" | "slide" | "wipe" | "flip" | "clockWipe" | "dissolve" | "crossZoom" | "dreamyZoom" | "filmBurn" | "zoomBlur" | "zoomInOut" | "iris" | "ripple" | "swap" | "linearBlur";
       direction?: "from-left" | "from-right" | "from-top" | "from-bottom";
       durationInFrames?: number;
     };

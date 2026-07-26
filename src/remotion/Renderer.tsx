@@ -6,6 +6,16 @@ import { slide } from "@remotion/transitions/slide";
 import { wipe } from "@remotion/transitions/wipe";
 import { flip } from "@remotion/transitions/flip";
 import { clockWipe } from "@remotion/transitions/clock-wipe";
+import { dissolve } from "@remotion/transitions/dissolve";
+import { crossZoom } from "@remotion/transitions/cross-zoom";
+import { dreamyZoom } from "@remotion/transitions/dreamy-zoom";
+import { filmBurn } from "@remotion/transitions/film-burn";
+import { zoomBlur } from "@remotion/transitions/zoom-blur";
+import { zoomInOut } from "@remotion/transitions/zoom-in-out";
+import { iris } from "@remotion/transitions/iris";
+import { ripple } from "@remotion/transitions/ripple";
+import { swap } from "@remotion/transitions/swap";
+import { linearBlur } from "@remotion/transitions/linear-blur";
 import type { Composition, Scene, SceneElement, Transition } from "../schema/scene";
 import { TextElement } from "./elements/TextElement";
 import { ImageElement } from "./elements/ImageElement";
@@ -75,6 +85,27 @@ function presentationFor(
       return clockWipe({ width: canvasWidth, height: canvasHeight }) as unknown as ReturnType<
         typeof fade
       >;
+    case "dissolve":
+      return dissolve({}) as unknown as ReturnType<typeof fade>;
+    case "crossZoom":
+      return crossZoom({}) as unknown as ReturnType<typeof fade>;
+    case "dreamyZoom":
+      return dreamyZoom({}) as unknown as ReturnType<typeof fade>;
+    case "filmBurn":
+      return filmBurn({}) as unknown as ReturnType<typeof fade>;
+    case "zoomBlur":
+      return zoomBlur({}) as unknown as ReturnType<typeof fade>;
+    case "zoomInOut":
+      // ZoomInOutProps is Record<string, never>; pass a typed empty object.
+      return zoomInOut({} as never) as unknown as ReturnType<typeof fade>;
+    case "iris":
+      return iris({ width: canvasWidth, height: canvasHeight } as never) as unknown as ReturnType<typeof fade>;
+    case "ripple":
+      return ripple({} as never) as unknown as ReturnType<typeof fade>;
+    case "swap":
+      return swap({}) as unknown as ReturnType<typeof fade>;
+    case "linearBlur":
+      return linearBlur({}) as unknown as ReturnType<typeof fade>;
     case "fade":
     case "none":
     default:
