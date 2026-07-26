@@ -154,7 +154,7 @@ function groupEvents(events: ChatEvent[]): ChatItem[] {
   return out;
 }
 
-type FilterMode = "all" | "ops" | "errors" | "thinking";
+type FilterMode = "all" | "ops" | "errors" | "thinking" | "reasoning";
 
 const QUICK_START_PROMPTS = [
   "Add an intro scene with a bold title that fades in",
@@ -213,6 +213,9 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
       if (filter === "ops") return it.kind === "operation";
       if (filter === "errors") return it.kind === "error" || (it.kind === "operation" && it.outcome && !it.outcome.ok);
       if (filter === "thinking") return it.kind === "thinking";
+      // "reasoning" hides everything except sequential_thinking operations,
+      // so the user can scrub past reasoning-only runs of the agent.
+      if (filter === "reasoning") return it.kind === "operation" && it.name === "sequential_thinking";
       return true;
     }).map((it) => {
       // Hide thinking content if showReasoning is off
@@ -223,14 +226,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
 
   // Counts for filter chips
   const counts = useMemo(() => {
-    let ops = 0, errors = 0, thinking = 0;
+    let ops = 0, errors = 0, thinking = 0, reasoning = 0;
     for (const it of items) {
-      if (it.kind === "operation") ops++;
+      if (it.kind === "operation") {
+        ops++;
+        if (it.name === "sequential_thinking") reasoning++;
+      }
       if (it.kind === "error") errors++;
       if (it.kind === "operation" && it.outcome && !it.outcome.ok) errors++;
       if (it.kind === "thinking") thinking++;
     }
-    return { ops, errors, thinking };
+    return { ops, errors, thinking, reasoning };
   }, [items]);
 
   React.useEffect(() => {
@@ -240,6 +246,24 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   React.useEffect(() => {
     logEndRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [items.length, busy]);
+
+  // Auto-expand sequential_thinking operations when they arrive, so
+  // the user immediately sees the agent's reasoning without clicking.
+  // We only auto-expand on insertion (we check via items diff in the
+  // loop below). Other ops stay collapsed by default.
+  React.useEffect(() => {
+    setExpandedOps((prev) => {
+      let changed = false;
+      const next = new Set(prev);
+      for (const it of items) {
+        if (it.kind === "operation" && it.name === "sequential_thinking" && !prev.has(it.id)) {
+          next.add(it.id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
+    });
+  }, [items]);
 
   const toggleOp = (id: string) => {
     setExpandedOps((prev) => {
@@ -285,7 +309,16 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
               className={`chat-filter-chip ${filter === "thinking" ? "active" : ""}`}
               onClick={() => setFilter("thinking")}
             >
-              Reasoning {counts.thinking > 0 && <span className="chat-filter-count">{counts.thinking}</span>}
+              Thinking {counts.thinking > 0 && <span className="chat-filter-count">{counts.thinking}</span>}
+            </button>
+            <button
+              role="tab"
+              aria-selected={filter === "reasoning"}
+              className={`chat-filter-chip reasoning ${filter === "reasoning" ? "active" : ""}`}
+              onClick={() => setFilter("reasoning")}
+              title="Only show sequential_thinking tool calls - the agent's structured reasoning chains"
+            >
+              Reasoning tools {counts.reasoning > 0 && <span className="chat-filter-count reasoning">{counts.reasoning}</span>}
             </button>
           </div>
           <label className="chat-toggle-reasoning" title="Show or hide agent reasoning">
@@ -360,8 +393,10 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             const isError = item.outcome !== null && !item.outcome.ok;
             const isOk = item.outcome !== null && item.outcome.ok;
             const status = isRunning ? "running" : isError ? "error" : isOk ? "ok" : "ok";
+            const isReasoning = item.name === "sequential_thinking";
+            const opClasses = `chat-item chat-item-operation chat-item-op-${status}${isReasoning ? " chat-item-op-reasoning" : ""}`;
             return (
-              <div key={item.id} className={`chat-item chat-item-operation chat-item-op-${status}`}>
+              <div key={item.id} className={opClasses}>
                 <button
                   className="chat-item-op-header"
                   onClick={() => toggleOp(item.id)}
@@ -385,6 +420,51 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                       <div className="chat-item-op-section-label">args</div>
                       <pre className="chat-item-op-json">{renderValue(item.args)}</pre>
                     </div>
+                    {/* Custom rendering for sequential_thinking: show the
+                        reasoning chain summary and the next-step suggestions
+                        as chips, instead of just dumping the JSON. The raw
+                        JSON is still available below. */}
+                    {item.name === "sequential_thinking" && item.outcome && item.outcome.ok && (() => {
+                      const result = item.outcome.payload as Record<string, unknown> | undefined;
+                      if (!result || typeof result !== "object") return null;
+                      const recorded = result.recorded as Record<string, unknown> | undefined;
+                      const summary = typeof result.chainSummary === "string" ? result.chainSummary : "";
+                      const nextSteps = Array.isArray(result.nextStep) ? (result.nextStep as Array<Record<string, unknown>>) : [];
+                      const thoughtText = recorded && typeof recorded.thought === "string" ? recorded.thought : "";
+                      return (
+                        <>
+                          {thoughtText && (
+                            <div className="chat-item-op-section">
+                              <div className="chat-item-op-section-label">this thought</div>
+                              <div className="chat-item-op-thought">{thoughtText}</div>
+                            </div>
+                          )}
+                          {summary && (
+                            <div className="chat-item-op-section">
+                              <div className="chat-item-op-section-label">chain so far</div>
+                              <pre className="chat-item-op-chain">{summary}</pre>
+                            </div>
+                          )}
+                          {nextSteps.length > 0 && (
+                            <div className="chat-item-op-section">
+                              <div className="chat-item-op-section-label">suggested next steps</div>
+                              <div className="chat-item-op-next-steps">
+                                {nextSteps.map((s, i) => {
+                                  const tool = typeof s.tool === "string" ? s.tool : "?";
+                                  const reason = typeof s.reason === "string" ? s.reason : "";
+                                  return (
+                                    <div key={i} className="chat-item-op-next-step-chip" title={reason}>
+                                      <span className="chat-item-op-next-step-tool">{tool}</span>
+                                      {reason && <span className="chat-item-op-next-step-reason">{reason}</span>}
+                                    </div>
+                                  );
+                                })}
+                              </div>
+                            </div>
+                          )}
+                        </>
+                      );
+                    })()}
                     {item.outcome && item.outcome.ok && (
                       <div className="chat-item-op-section">
                         <div className="chat-item-op-section-label">result</div>
@@ -517,6 +597,30 @@ function summarizeResult(payload: unknown, toolName?: string): string {
     if (toolName === "list_scenes") {
       if (Array.isArray(payload)) {
         return `${payload.length} scene${payload.length === 1 ? "" : "s"}`;
+      }
+    }
+    if (toolName === "sequential_thinking") {
+      // Reasoning tools - show a different one-liner that emphasizes the
+      // thought-number / revision / next-step format, not the raw args.
+      if (typeof obj.recorded === "object" && obj.recorded !== null) {
+        const r = obj.recorded as Record<string, unknown>;
+        const num = typeof r.thoughtNumber === "number" ? r.thoughtNumber : null;
+        const total = typeof r.thoughtNumber === "number" && typeof obj.chainLength === "number"
+          ? (obj.chainLength as number)
+          : null;
+        const parts: string[] = [];
+        if (num !== null && total !== null) {
+          parts.push(num === total ? `thought ${num}` : `thought ${num} of ${total}`);
+        } else if (num !== null) {
+          parts.push(`thought ${num}`);
+        }
+        if (r.isRevision && typeof r.revisesThoughtNumber === "number") {
+          parts.push(`revised #${r.revisesThoughtNumber}`);
+        }
+        if (Array.isArray(obj.nextStep) && (obj.nextStep as unknown[]).length > 0) {
+          parts.push(`${(obj.nextStep as unknown[]).length} next-step suggestion${(obj.nextStep as unknown[]).length === 1 ? "" : "s"}`);
+        }
+        return parts.join(" — ") || (typeof r.thought === "string" ? r.thought.slice(0, 80) : "reasoned");
       }
     }
     if (toolName === "get_scene") {

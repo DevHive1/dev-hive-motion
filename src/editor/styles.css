@@ -1261,6 +1261,82 @@ button {
   color: var(--accent-amber);
 }
 
+/* Reasoning tools (sequential_thinking) get a softer purple tint to
+   distinguish them from action tools. The shape is identical to
+   other ops; only the left edge + name color shift. */
+.chat-item-operation.chat-item-op-reasoning {
+  border-left: 3px solid rgba(139, 92, 246, 0.65);
+}
+
+.chat-item-operation.chat-item-op-reasoning .chat-item-op-name {
+  color: rgba(139, 92, 246, 1);
+}
+
+/* Reasoning-tool body sections — chain summary and next-step chips. */
+.chat-item-op-thought {
+  background: rgba(139, 92, 246, 0.08);
+  border-left: 3px solid rgba(139, 92, 246, 0.5);
+  padding: 8px 12px;
+  border-radius: 6px;
+  font-size: 12.5px;
+  line-height: 1.5;
+  color: var(--text-primary);
+  font-style: italic;
+}
+
+.chat-item-op-chain {
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  padding: 8px 10px;
+  font-family: var(--mono);
+  font-size: 11px;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
+  margin: 0;
+}
+
+.chat-item-op-next-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-item-op-next-step-chip {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  background: rgba(34, 197, 94, 0.07);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: 6px;
+  cursor: help;
+}
+
+.chat-item-op-next-step-tool {
+  font-family: var(--mono);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-green, #22c55e);
+}
+
+.chat-item-op-next-step-reason {
+  font-size: 11.5px;
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+
+/* Reasoning filter chip — purple to mirror the op card left border. */
+.chat-filter-chip.reasoning {
+  color: rgba(139, 92, 246, 1);
+}
+
+.chat-filter-count.reasoning {
+  background: rgba(139, 92, 246, 0.18);
+  color: rgba(139, 92, 246, 1);
+}
+
 .chat-item-op-name {
   font-family: var(--mono);
   font-size: 11.5px;

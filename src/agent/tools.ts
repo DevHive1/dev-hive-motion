@@ -53,6 +53,7 @@ import {
 import { planSceneLayoutImpl, planSceneLayoutDef } from "./tools/scene/planLayout";
 import { validateElementPatch, checkTransparentBlackScreen } from "./tools/element/validatePatch";
 import { backgroundRemovalImpl, backgroundRemovalDef } from "./tools/image/removeBackground";
+import { sequentialThinkingImpl, sequentialThinkingDef } from "./tools/reasoning/sequentialThinking";
 
 /** Ollama/OpenAI-style tool definitions. Sent to the model on every turn. */
 export const toolDefinitions = [
@@ -91,6 +92,7 @@ export const toolDefinitions = [
       },
     },
   },
+  sequentialThinkingDef,
   {
     type: "function",
     function: {
@@ -1066,6 +1068,10 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       nextSceneId: index < composition.scenes.length - 1 ? composition.scenes[index + 1].id : null,
       totalScenes: composition.scenes.length,
     };
+  },
+
+  async sequential_thinking(args: any) {
+    return await sequentialThinkingImpl(args);
   },
 
   async add_scene(args: { name: string; durationInFrames: number; backgroundColor?: string }) {

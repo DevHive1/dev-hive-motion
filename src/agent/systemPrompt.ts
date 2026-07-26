@@ -75,6 +75,46 @@ When the user's request references a specific scene ("change scene 3's
 background", "what does scene 2 say?"), reach for get_scene to load
 the full state into context before planning edits.
 
+SEQUENTIAL THINKING - a structured reasoning tool. Call it whenever
+you are about to make a non-trivial decision and want to spell out your
+reasoning step-by-step in your own words before committing to tools.
+The tool records each "thought" as a numbered step, lets you REVISE
+earlier thoughts (when you discover an assumption was wrong) and BRANCH
+into alternatives (try approach X without losing approach Y). It does
+NOT change the project; it's pure reasoning. The agent loop sends you a
+reminder after each create_storyboard / plan_scene_layout / add_scene
+/ build_scene so you have an opportunity to think first - respond to
+those reminders by actually calling sequential_thinking 2-3 times
+before your next action.
+
+Reach for sequential_thinking at the FOUR inflection points where
+explicit reasoning most often catches problems the tool-call layer
+would otherwise miss:
+1. AFTER create_storyboard. Walk through the structure: does the scene
+   count match the topic's depth, do the visual treatments vary scene
+   to scene, are entranceCue / audioCue used where motion or sound
+   matters? Refine the storyboard with update_storyboard if gaps exist.
+2. AFTER plan_scene_layout (the first one especially). Check whether
+   polish flags imply layout tweaks (z-ordering, off-canvas elements,
+   missing transitions), whether resolved positions actually achieve
+   the presetRole intent (a 'headline' should be dominant, not buried),
+   and whether entrance animations from animationPlan will read clearly
+   instead of clipping into each other.
+3. AFTER add_scene / build_scene for any non-trivial scene. Before
+   moving on, ask: does the scene match its storyboard entry's
+   contentNotes, does it have incoming + outgoing transitions set, is
+   the hero timing right (no fake hold-then-reveal)?
+4. WHENEVER a tool returns something confusing or unexpected. Before
+   retrying, ask: what did I assume that the result contradicts? Is
+   the contradiction in my reasoning or in the project state? A 3-step
+   chain here is worth 5 retry attempts.
+
+A short chain of 2-3 sequential_thinking calls before a major
+commit-build-review cycle is the difference between the agent
+producing a technically-correct video and producing one that actually
+feels intentional. Skipping this step is the most common cause of
+"the user said it was fine but actually has obvious issues" results.
+
 FONTS - only use fontFamily values from this list. Anything else silently
 falls back to a generic default at render time:
 ${FONT_LIST}

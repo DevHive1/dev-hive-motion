@@ -85,6 +85,21 @@ export async function runAgent(
   let reviewNudgesIssued = 0;
   const MAX_REVIEW_NUDGES = 1;
 
+  // Sequential-thinking nudge gate. After each trigger tool
+  // (create_storyboard, plan_scene_layout, add_scene, build_scene),
+  // we push a system-reminder into the conversation suggesting the
+  // agent call sequential_thinking before its next major decision.
+  // This nudges the model into explicit reasoning at the three
+  // inflection points where reasoning matters most: structuring the
+  // project, resolving layout, and committing to a scene. Each nudge
+  // fires at most once per project per trigger (we track sessionId
+  // implicitly via the messages[] array - the nudge text doesn't
+  // repeat if the same tool got called twice with the same intent).
+  // The agent can ignore the nudge - it's guidance, not a gate.
+  const sceneNudgeIssuedFor = new Set<string>();
+  let storyboardNudgeIssued = false;
+  let firstLayoutNudgeIssued = false;
+
   const pushReviewNudge = () => {
     const ids = [...unReviewedScenes];
     if (ids.length === 0) return false;
@@ -104,6 +119,52 @@ export async function runAgent(
     });
     reviewNudgesIssued++;
     return true;
+  };
+
+  /**
+   * Push a system-reminder asking the agent to call sequential_thinking
+   * before its next major decision. Three trigger points, each with its
+   * own guidance specific to that decision. The agent can ignore the
+   * reminder (it's a hint, not a gate) - but in practice small models
+   * often forget to step out of action mode, and these nudges catch
+   * that. We dedupe so the same nudge doesn't fire twice in one run.
+   */
+  const pushSequentialThinkingNudge = (kind: "storyboard" | "layout" | "scene", context?: { sceneId?: string; sceneName?: string }) => {
+    let content: string;
+    switch (kind) {
+      case "storyboard":
+        content =
+          `[SYSTEM REMINDER - SEQUENTIAL THINKING] You just created the storyboard. Before building scenes, ` +
+          `take 2-3 sequential_thinking steps to review the structure: ` +
+          `(1) Does the scene count match the topic's depth? ` +
+          `(2) Does the visual treatment vary scene-to-scene (no two scenes should look identical)? ` +
+          `(3) Are the entranceCue / audioCue fields used where motion or sound matters? ` +
+          `Then refine the storyboard with update_storyboard if you find gaps.`;
+        break;
+      case "layout":
+        content =
+          `[SYSTEM REMINDER - SEQUENTIAL THINKING] You just resolved the layout for a scene. Before ` +
+          `committing to build_scene, take 2-3 sequential_thinking steps to verify: ` +
+          `(1) Did the polish flags suggest any tweaks (z-ordering, off-canvas elements, missing ` +
+          `incoming/outgoing transitions)? ` +
+          `(2) Does the resolved x/y/width/height actually achieve what the presetRole intended ` +
+          `(e.g. a 'headline' should be the visually dominant element, not buried)? ` +
+          `(3) Will the entrance animations from animationPlan make the elements feel alive without ` +
+          `clipping into each other? ` +
+          `Apply any fixes via update_element / set_scene_transition / edit_timing BEFORE building.`;
+        break;
+      case "scene":
+        content = `[SYSTEM REMINDER - SEQUENTIAL THINKING] You just built scene "${context?.sceneName ?? context?.sceneId ?? "?"}". ` +
+          `Before moving to the next scene or declaring done, take 2-3 sequential_thinking steps: ` +
+          `(1) Does this scene match its storyboard entry's contentNotes? ` +
+          `(2) Does it have an incoming and outgoing transition (call set_scene_transition if ` +
+          `review_scene flags them)? ` +
+          `(3) Does the hero element start past frame 0 if the user described a "calm"/"hold"/"drift" ` +
+          `opening (a hold-then-reveal needs a non-zero startFrame with a delayed entrance)? ` +
+          `Then call review_scene and act on its flags before moving on.`;
+        break;
+    }
+    messages.push({ role: "user", content });
   };
 
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
@@ -177,11 +238,21 @@ export async function runAgent(
           if ((name === "add_scene" || name === "build_scene") && typeof result.sceneId === "string") {
             completedSceneIds.add(result.sceneId);
             unReviewedScenes.add(result.sceneId);
+            // Sequential-thinking nudge: after building a scene, the
+            // model should reason about whether it serves the
+            // storyboard before moving to the next one. We only
+            // nudge once per scene in this run (deduped by sceneId).
+            if (!sceneNudgeIssuedFor.has(result.sceneId)) {
+              sceneNudgeIssuedFor.add(result.sceneId);
+              const sceneName = typeof args.name === "string" ? args.name : undefined;
+              pushSequentialThinkingNudge("scene", { sceneId: result.sceneId, sceneName });
+            }
           }
           // remove_scene clears any pending review for that id
           if (name === "remove_scene" && typeof args.sceneId === "string") {
             unReviewedScenes.delete(args.sceneId);
             completedSceneIds.delete(args.sceneId);
+            sceneNudgeIssuedFor.delete(args.sceneId);
           }
           // review_scene consumes the pending review for the scene it just reviewed
           if (name === "review_scene" && typeof args.sceneId === "string") {
@@ -193,6 +264,21 @@ export async function runAgent(
           // it has at least looked at the project end-to-end.
           if (name === "timeline_overview") {
             for (const id of completedSceneIds) unReviewedScenes.delete(id);
+          }
+          // create_storyboard result triggers the storyboard-level
+          // sequential_thinking nudge (at most once per run).
+          if (name === "create_storyboard" && !storyboardNudgeIssued) {
+            storyboardNudgeIssued = true;
+            pushSequentialThinkingNudge("storyboard");
+          }
+          // plan_scene_layout result triggers a layout-level
+          // sequential_thinking nudge the first time, so the agent
+          // reviews the polish flags before committing. Subsequent
+          // layout calls don't need a nudge - the model has the idea
+          // by then.
+          if (name === "plan_scene_layout" && !firstLayoutNudgeIssued) {
+            firstLayoutNudgeIssued = true;
+            pushSequentialThinkingNudge("layout");
           }
         }
       } catch (err) {
