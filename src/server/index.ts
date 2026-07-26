@@ -8,6 +8,7 @@ import type { Message } from "ollama";
 import { compositionStore } from "../store/compositionStore";
 import { chatLogStore } from "./chatLogStore";
 import { runAgent } from "../agent/agentLoop";
+import { logger } from "../core/utils/logger";
 import { ollama, DEFAULT_OLLAMA_MODEL } from "../agent/ollamaClient";
 import { CompositionSchema } from "../schema/scene";
 import { renderComposition, RENDERS_DIR, type RenderFormat } from "./render";
@@ -176,7 +177,9 @@ app.get("/api/chatlog", (_req, res) => {
 
 app.delete("/api/chatlog", async (_req, res) => {
   await chatLogStore.clear();
+  const prevLen = conversationHistory.length;
   conversationHistory = [];
+  logger.info("Chat cleared", { conversationHistoryWasLength: prevLen });
   res.json({ ok: true });
 });
 

@@ -7,6 +7,11 @@ data/
 # Generated media (downloaded by Pollinations provider on demand)
 public/audio/
 public/images/
+# User-uploaded images (saved by /api/upload and used by add_image_element)
+public/uploads/
 
 # Devy Agent local data (plan, memory, chat log, cache)
 .devy-agent/
+
+# User feedback notes (not part of the product)
+error.txt

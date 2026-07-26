@@ -451,7 +451,10 @@ TOOLS AT A GLANCE
   generate_ai_image (for things stock photos don't cover), generate_voiceover
   (narration audio), search_free_music (licensed background music MP3s via
   Jamendo — requires JAMENDO_CLIENT_ID), check_url (verify any other URL),
-  check_contrast (text readability)
+  check_contrast (text readability), remove_background (strip a solid-color
+  background from an image — pass the saved /uploads/... URL or a
+  generate_ai_image result, get back a transparent PNG to use in
+  add_image_element; tune threshold for more/less aggressive removal)
 
 NEVER INVENT A URL - AND NEVER SILENTLY FALL BACK TO ONE EITHER. Any time you
 need an image, video, or audio src, get it from a tool

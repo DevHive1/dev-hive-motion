@@ -52,6 +52,7 @@ import {
 } from "./tools/scene/templates";
 import { planSceneLayoutImpl, planSceneLayoutDef } from "./tools/scene/planLayout";
 import { validateElementPatch, checkTransparentBlackScreen } from "./tools/element/validatePatch";
+import { backgroundRemovalImpl, backgroundRemovalDef } from "./tools/image/removeBackground";
 
 /** Ollama/OpenAI-style tool definitions. Sent to the model on every turn. */
 export const toolDefinitions = [
@@ -154,6 +155,7 @@ export const toolDefinitions = [
       },
     },
   },
+  backgroundRemovalDef,
   {
     type: "function",
     function: {
@@ -1044,6 +1046,10 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
     };
     await addElementToScene(args.sceneId, element);
     return { elementId: element.id };
+  },
+
+  async remove_background(args: any) {
+    return await backgroundRemovalImpl(args);
   },
 
   async add_video_element(args: any) {

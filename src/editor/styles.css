@@ -927,6 +927,65 @@ button {
   cursor: not-allowed;
 }
 
+/* Confirmation flash shown after "Clear chat" — explains exactly
+   what got cleared (chat history + log) and what didn't (project
+   composition, which stays in the system prompt so the agent knows
+   what to edit). */
+.chat-flash {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  margin: 8px 12px 0;
+  padding: 10px 12px;
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.25);
+  border-radius: 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--text-primary);
+  animation: chat-flash-in 240ms ease-out;
+}
+
+@keyframes chat-flash-in {
+  from { opacity: 0; transform: translateY(-4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.chat-flash-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #22c55e;
+  color: white;
+  font-size: 10px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  margin-top: 1px;
+}
+
+.chat-flash-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.chat-flash-close {
+  flex-shrink: 0;
+  background: none;
+  border: none;
+  color: var(--text-faint);
+  cursor: pointer;
+  font-size: 16px;
+  padding: 0 4px;
+  line-height: 1;
+}
+
+.chat-flash-close:hover {
+  color: var(--text-primary);
+}
+
 .chat-log {
   flex: 1;
   overflow-y: auto;

@@ -176,6 +176,34 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
   const [filter, setFilter] = useState<FilterMode>("all");
   const [showReasoning, setShowReasoning] = useState(true);
   const [expandedOps, setExpandedOps] = useState<Set<string>>(new Set());
+  const [clearFlash, setClearFlash] = useState<string | null>(null);
+
+  // Wrap onClear so we can show a brief confirmation flash explaining
+  // exactly what got cleared (the chat history + log) and what didn't
+  // (the project composition - the agent still sees that, since it's
+  // always in the system prompt). This addresses the common confusion:
+  // "I cleared the chat, but the agent still remembers the project."
+  const handleClear = () => {
+    const sceneCount = composition.scenes.length;
+    const elementCount = composition.scenes.reduce((s, sc) => s + sc.elements.length, 0);
+    const projectLabel = sceneCount > 0
+      ? `${sceneCount} scene${sceneCount === 1 ? "" : "s"}, ${elementCount} element${elementCount === 1 ? "" : "s"}`
+      : "no project yet";
+    const ok = window.confirm(
+      `Clear chat history?\n\n` +
+      `This forgets the conversation so far (the agent's memory of what you said). ` +
+      `Your project (${projectLabel}) is NOT cleared - the agent still sees it in every message ` +
+      `because the live composition is part of the system prompt.\n\n` +
+      `Want to keep going?`,
+    );
+    if (!ok) return;
+    onClear();
+    setClearFlash(
+      `Chat cleared. Conversation history is gone. ` +
+      `Project (${projectLabel}) is still in the agent's context — clear scenes from the timeline if you want a blank slate.`,
+    );
+    setTimeout(() => setClearFlash(null), 8000);
+  };
 
   const items = useMemo(() => groupEvents(log), [log]);
 
@@ -268,9 +296,17 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
             />
             <span>show reasoning</span>
           </label>
-          <button className="chat-clear-btn" onClick={onClear} disabled={busy}>
+          <button className="chat-clear-btn" onClick={handleClear} disabled={busy} title="Clear the chat history and log. The project itself is not cleared.">
             Clear chat
           </button>
+        </div>
+      )}
+
+      {clearFlash && (
+        <div className="chat-flash" role="status">
+          <span className="chat-flash-icon" aria-hidden="true">✓</span>
+          <span className="chat-flash-text">{clearFlash}</span>
+          <button className="chat-flash-close" onClick={() => setClearFlash(null)} aria-label="Dismiss">×</button>
         </div>
       )}
 
