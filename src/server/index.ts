@@ -12,6 +12,7 @@ import { ollama, DEFAULT_OLLAMA_MODEL } from "../agent/ollamaClient";
 import { CompositionSchema } from "../schema/scene";
 import { renderComposition, RENDERS_DIR, type RenderFormat } from "./render";
 import { renderSingleScene } from "./renderSingleScene";
+import { saveDataUrl } from "./assetUpload";
 
 const app = express();
 const httpServer = createServer(app);
@@ -24,6 +25,19 @@ app.use("/renders", express.static(RENDERS_DIR));
 
 const PUBLIC_DIR = path.resolve(process.cwd(), "public");
 app.use(express.static(PUBLIC_DIR));
+// Serve uploaded assets at /uploads/* so the live preview and the
+// Remotion renderer can both fetch them. We serve from public/uploads/
+// (the directory assetUpload.ts writes to). Without this, the file
+// would be on disk but unreachable from the browser or the renderer.
+app.use(
+  "/uploads",
+  express.static(path.join(PUBLIC_DIR, "uploads"), {
+    setHeaders: (res) => {
+      // Reasonable cache - assets don't change once uploaded.
+      res.setHeader("Cache-Control", "public, max-age=3600");
+    },
+  }),
+);
 
 const PORT = Number(process.env.PORT ?? 4000);
 let conversationHistory: Message[] = [];
@@ -166,6 +180,29 @@ app.delete("/api/chatlog", async (_req, res) => {
   res.json({ ok: true });
 });
 
+// ─── Asset Upload ────────────────────────────────────────────────────────────
+// Persist an attached image to public/uploads/ and return the saved URL.
+// The client can use this for any image it wants to embed persistently
+// (user-attached reference images, agent-generated images before
+// they're added to a scene). The saved URL is what gets used in
+// element.src - it's stable across restarts and renders reliably in
+// the exported video. Without this, a base64 data URL embedded in the
+// composition JSON renders in the live preview but fails (or bloats
+// the JSON to MBs) when the video is exported.
+app.post("/api/upload", async (req, res) => {
+  const { dataUrl, name } = req.body as { dataUrl?: string; name?: string };
+  if (!dataUrl) {
+    res.status(400).json({ error: "Missing 'dataUrl' in request body." });
+    return;
+  }
+  try {
+    const savedUrl = await saveDataUrl(dataUrl);
+    res.json({ url: savedUrl, name: name ?? "" });
+  } catch (err) {
+    res.status(400).json({ error: err instanceof Error ? err.message : String(err) });
+  }
+});
+
 // ─── Agent ───────────────────────────────────────────────────────────────────
 app.post("/api/agent/prompt", async (req, res) => {
   const { prompt, model, mentions, imageUrls } = req.body as {
@@ -187,6 +224,27 @@ app.post("/api/agent/prompt", async (req, res) => {
   });
   res.flushHeaders();
 
+  // Persist any attached data URLs to disk before the agent sees them.
+  // The agent receives BOTH the data URL (for the model's vision) AND
+  // the saved URL (for element.src). The PromptEngine reminder tells
+  // the agent: "use the saved URL, not the data URL, when adding it to
+  // a scene". If the data URL is already a saved URL (e.g. re-sent
+  // across a refresh), saveDataUrl returns it unchanged.
+  const savedImageUrls: string[] = [];
+  if (imageUrls && imageUrls.length > 0) {
+    for (const url of imageUrls) {
+      try {
+        const saved = await saveDataUrl(url);
+        savedImageUrls.push(saved);
+      } catch (err) {
+        // If saving fails, fall back to the original URL. The agent
+        // will still get the image, just not as a persisted file.
+        console.warn(`[upload] failed to save image:`, err instanceof Error ? err.message : err);
+        savedImageUrls.push(url);
+      }
+    }
+  }
+
   await chatLogStore.append({ type: "user_prompt", text: prompt, mentions, imageUrls });
 
   const updatedHistory = await runAgent(
@@ -197,7 +255,7 @@ app.post("/api/agent/prompt", async (req, res) => {
       chatLogStore.append(event).catch(() => {});
     },
     model || DEFAULT_OLLAMA_MODEL,
-    { mentions, imageUrls },
+    { mentions, imageUrls, savedImageUrls },
   );
 
   conversationHistory = updatedHistory.slice(-40);

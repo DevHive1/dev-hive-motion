@@ -108,6 +108,11 @@ export const MentionInput: React.FC<MentionInputProps> = ({
 
     for (const file of Array.from(files)) {
       const compressed = await compressImage(file);
+      // The server will save this data URL to /uploads/ when the user
+      // sends the message, and the agent will get the saved URL back
+      // as a 'savedImageUrls' array alongside the vision data. We keep
+      // the data URL in the preview strip here so the user sees their
+      // attached image immediately.
       setImageUrls((prev) => [...prev, compressed]);
     }
     if (fileInputRef.current) {

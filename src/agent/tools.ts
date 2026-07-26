@@ -131,12 +131,12 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "add_image_element",
-      description: "Add an image element to a scene.",
+      description: "Add an image element to a scene. The src MUST be a stable URL (e.g. /uploads/abc.jpg from a user-attached image, or a real URL from search_stock_images / generate_ai_image). Do NOT pass a base64 data: URL - data URLs render in the live preview but fail or bloat the composition JSON when the video is exported. If the user attached an image to this chat message, the system prompt will list the saved URL to use; copy it directly.",
       parameters: {
         type: "object",
         properties: {
           sceneId: { type: "string" },
-          src: { type: "string", description: "URL or local public/ path" },
+          src: { type: "string", description: "A stable URL or /uploads/ path. NOT a base64 data: URL - those break the exported video." },
           x: { type: "number", description: "Percent of canvas width from the left (0-100), not pixels." },
           y: { type: "number", description: "Percent of canvas height from the top (0-100), not pixels." },
           width: { type: "number", description: "Percent of canvas width (0-100). Use 100 for a full-bleed background image." },
@@ -1006,6 +1006,21 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
   },
 
   async add_image_element(args: any) {
+    // Reject data: URLs at the tool boundary. Data URLs render in the
+    // live preview (the browser handles data: natively) but Remotion's
+    // <Img> renderer does not reliably embed them into the exported
+    // MP4 frames, and embedding them in the composition JSON balloons
+    // it to MBs. The user-attached image flow now saves data URLs to
+    // public/uploads/ on the server and exposes the saved URL via the
+    // system prompt - the agent should always copy that saved URL.
+    if (typeof args.src === "string" && args.src.startsWith("data:")) {
+      throw new Error(
+        `add_image_element: src is a base64 data: URL, which fails in the exported video. ` +
+          `If the user attached an image to this chat, the system prompt lists the saved URL ` +
+          `(e.g. "/uploads/abc.jpg") - use that instead. ` +
+          `If you generated the image with generate_ai_image, use the URL it returned (it is already a real URL).`,
+      );
+    }
     const element: ImageElement = {
       id: `el-${nanoid(6)}`,
       type: "image",

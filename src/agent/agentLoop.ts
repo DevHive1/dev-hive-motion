@@ -24,6 +24,8 @@ export async function runAgent(
   options?: {
     mentions?: Array<{ type: string; id: string; name: string }>;
     imageUrls?: string[];
+    /** Persisted URLs for the same images (saved to public/uploads/). */
+    savedImageUrls?: string[];
   },
 ): Promise<Message[]> {
   const currentComp = sceneStore.get();
@@ -36,6 +38,7 @@ export async function runAgent(
     availableTools: toolDefinitions.map((t) => t.function.name),
     mentions: options?.mentions,
     imageUrls: options?.imageUrls,
+    savedImageUrls: options?.savedImageUrls,
   });
 
   // 2. Perform Chain of Thought analysis & emit reasoning event

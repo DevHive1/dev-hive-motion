@@ -8,6 +8,13 @@ export interface PromptContext {
   availableTools: string[];
   mentions?: Array<{ type: string; id: string; name: string }>;
   imageUrls?: string[];
+  /**
+   * Persisted URLs (saved to public/uploads/) for the attached images,
+   * in the same order as imageUrls. When the agent wants to add an
+   * attached image to a scene, it uses the saved URL (not the data
+   * URL) so the image renders reliably in the exported video.
+   */
+  savedImageUrls?: string[];
 }
 
 export interface PromptSection {
@@ -104,10 +111,24 @@ export class PromptEngine {
       id: "images",
       priority: 60,
       condition: (ctx) => Boolean(ctx.imageUrls && ctx.imageUrls.length > 0),
-      render: (ctx) =>
-        `THE USER ATTACHED ${ctx.imageUrls!.length} REFERENCE IMAGE(S) TO THIS MESSAGE.\n` +
-        `Treat them as visual briefs: extract their color palette, typography weight, layout structure, ` +
-        `and overall aesthetic, then apply those as the creative direction for whatever you build.`,
+      render: (ctx) => {
+        const urls = ctx.imageUrls!;
+        const saved = ctx.savedImageUrls ?? [];
+        const lines = [
+          `THE USER ATTACHED ${urls.length} REFERENCE IMAGE(S) TO THIS MESSAGE.`,
+          `Treat them as visual briefs: extract their color palette, typography weight, layout structure, and overall aesthetic, then apply those as the creative direction for whatever you build.`,
+        ];
+        if (saved.length === urls.length) {
+          lines.push(
+            ``,
+            `PERSISTED IMAGE URLS (use these when adding the image to a scene - they render correctly in the exported video):`,
+            ...saved.map((u, i) => `  - Image ${i + 1}: ${u}`),
+            ``,
+            `CRITICAL: When you call add_image_element or any tool that takes an image src, use the SAVED URL (e.g. "/uploads/abc.jpg"), NOT the data: URL. The data: URL is for the model's vision only - it is not saved across server restarts and it does not render reliably in the exported video. The saved URL is what you want.`,
+          );
+        }
+        return lines.join("\n");
+      },
     });
   }
 }
