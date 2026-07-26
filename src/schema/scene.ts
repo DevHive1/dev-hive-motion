@@ -191,6 +191,89 @@ export const StoryboardSceneSchema = z.object({
   keyElements: z.string(),
   transitionNote: z.string().default(""),
   animationNote: z.string().default(""),
+  // Per-scene production specs. These are guidance, not constraints - the
+  // storyboard is a planning document, and the actual values come from
+  // plan_scene_layout. The point is that the agent commits to a visual
+  // and timing direction per scene BEFORE building, instead of inventing
+  // them on the fly per element.
+  shotType: z
+    .enum(["establishing", "wide", "medium", "closeUp", "detail"])
+    .optional(),
+  visualTreatment: z.string().default(""),
+  targetDurationInFrames: z.number().optional(),
+  entranceCue: z.string().default(""),
+  audioCue: z
+    .object({
+      kind: z.enum(["voiceover", "music", "sfx", "silence"]),
+      description: z.string(),
+      startFrame: z.number().optional(),
+    })
+    .optional(),
+  dependencies: z.array(z.string()).default([]),
+});
+
+/**
+ * Structured design language the storyboard commits to up front, so
+ * the model has a concrete reference for color/type/margin instead of
+ * having to remember prose mood across 12 scenes. Each scene then
+ * references this via plan_scene_layout's designTokens.
+ */
+export const DesignLanguageSchema = z.object({
+  // 2-4 named colors in hex. The first is the dominant field, the
+  // remaining are accents/text. Don't pass more than 4 - palette
+  // discipline is enforced in plan_scene_layout.
+  palette: z.array(z.string()).default([]),
+  // One display font and one body font, by family name. e.g.
+  // { display: "Manrope", body: "Inter" }.
+  typePair: z
+    .object({
+      display: z.string(),
+      body: z.string(),
+    })
+    .default({ display: "Inter", body: "Inter" }),
+  // Margin in percent from the canvas edge. e.g. 8 means everything
+  // sits at least 8% from any edge. plan_scene_layout will snap
+  // element edges to this margin.
+  margin: z.number().min(0).max(20).default(8),
+  // Suggested type sizes for display/headline, body, and kicker in
+  // a consistent ratio. e.g. { display: 72, body: 28, kicker: 18 }.
+  typeScale: z
+    .object({
+      display: z.number(),
+      body: z.number(),
+      kicker: z.number(),
+    })
+    .default({ display: 72, body: 28, kicker: 18 }),
+  // Named motion vocabulary the project uses. e.g.
+  // ["fade-up", "fade-in", "ken-burns"].
+  motionVocabulary: z.array(z.string()).default([]),
+});
+
+/**
+ * Creative brief at the top of the storyboard: who's it for, where
+ * will it play, how long, what aspect ratio. Without this the agent
+ * guesses - usually wrong - and ends up making corporate explainer
+ * motion at 4:3 for a TikTok request, or 9:16 vertical for a
+ * YouTube hero.
+ */
+export const CreativeBriefSchema = z.object({
+  targetAudience: z.string().default(""),
+  platform: z.string().default(""),
+  aspectRatio: z.enum(["16:9", "9:16", "1:1", "4:3", "21:9"]).optional(),
+  targetDurationSeconds: z.number().optional(),
+  genre: z
+    .enum([
+      "corporate",
+      "social-reel",
+      "documentary",
+      "cinematic",
+      "kids",
+      "product-launch",
+      "educational",
+      "other",
+    ])
+    .default("other"),
+  designLanguage: DesignLanguageSchema.optional(),
 });
 
 export const StoryboardSchema = z.object({
@@ -198,6 +281,7 @@ export const StoryboardSchema = z.object({
   concept: z.string(),
   narrativeArc: z.string().default(""),
   moodDirection: z.string(),
+  brief: CreativeBriefSchema.optional(),
   scenes: z.array(StoryboardSceneSchema).default([]),
 });
 
@@ -236,6 +320,8 @@ export type CustomElement = z.infer<typeof CustomElementSchema>;
 export type AudioElement = z.infer<typeof AudioElementSchema>;
 export type StoryboardScene = z.infer<typeof StoryboardSceneSchema>;
 export type Storyboard = z.infer<typeof StoryboardSchema>;
+export type DesignLanguage = z.infer<typeof DesignLanguageSchema>;
+export type CreativeBrief = z.infer<typeof CreativeBriefSchema>;
 export type SceneElement = z.infer<typeof SceneElementSchema>;
 export type Scene = z.infer<typeof SceneSchema>;
 export type Composition = z.infer<typeof CompositionSchema>;
