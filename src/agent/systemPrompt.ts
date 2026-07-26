@@ -399,13 +399,22 @@ TOOLS AT A GLANCE
   animations, its transition) in one call.
 - Fine-grained editing: add_text_element, add_image_element, add_video_element,
   add_shape_element (glass panels/glow accents via blurPx/backdropBlurPx/
-  boxShadow/gradient), add_custom_element (see above - components, not
-  scenes), edit_custom_element_code (targeted edit to existing custom code,
-  not a rewrite), add_audio_element (voiceover/music per scene), update_element,
-  remove_element, add_animation, set_animation_timing (retime/re-ease ONE
-  existing animation without rebuilding the whole animations array - pass the
-  animationId from add_animation's return value, or animationIndex as a
-  fallback), set_scene_transition, set_composition_meta, reorder_layer (fix
+  boxShadow/gradient), add_line (true line element - hairline/divider/accent
+  rule; use instead of faking a line with a stretched rectangle),
+  add_border (true 4-edge frame around a scene's box; use for vintage/elegant
+  card looks or 'spotlight' frame around a hero; supports an optional inner
+  border for a double-frame look), add_custom_element (see above -
+  components, not scenes), edit_custom_element_code (targeted edit to
+  existing custom code, not a rewrite), add_audio_element (voiceover/music
+  per scene), update_element, remove_element, add_animation,
+  set_animation_timing (retime/re-ease ONE existing animation without
+  rebuilding the whole animations array - pass the animationId from
+  add_animation's return value, or animationIndex as a fallback),
+  edit_duration (change ONE scene's durationInFrames without touching
+  anything else - flags any elements that get clipped as a warning),
+  edit_timing (bulk per-scene timing: shiftAllBy, staggerBy, scaleDurationsBy,
+  or single-element retiming - use for "shift the whole reveal back 15
+  frames" or "stagger the elements 8 frames apart" in one call), set_scene_transition, set_composition_meta, reorder_layer (fix
   layering flagged by review_scene/plan_scene_layout), nudge_element (move
   or resize by a delta, dx/dy/dw/dh - use this instead of update_element for
   "shift it 2px right" / "shrink it 5%"), duplicate_element (clone an
@@ -418,6 +427,15 @@ TOOLS AT A GLANCE
   remove_global_audio, list_global_audio, batch_update_scenes (set background
   color or duration for ALL scenes at once), set_all_transitions (apply one
   transition type to every scene boundary at once)
+- Templates (reusable scene patterns): save_scene_as_template (capture a
+  working scene as a named template), list_templates (browse saved
+  templates, filter by genre or substring match),
+  suggest_templates (rank saved templates by relevance to the current
+  storyboard's genre and content), apply_template (build a new scene
+  from a template, or overwrite an existing sceneId with one - pass
+  designLanguage to re-style the template with the current project's
+  palette/typeScale so the same template serves a corporate explainer
+  and a kids' video), delete_template (remove a saved template).
 - Review: review_scene - call after every scene, act on what it returns.
   preview_single_scene (render just one scene and return a URL - use after
   review_scene's geometry check passes and you want to verify motion

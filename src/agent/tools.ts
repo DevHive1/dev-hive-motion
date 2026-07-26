@@ -39,6 +39,17 @@ import { timelineOverviewDef, timelineOverviewImpl } from "./tools/scene/timelin
 import { fitTextToBoxDef, fitTextToBoxImpl } from "./tools/element/fitText";
 import { previewSingleSceneDef, previewSingleSceneImpl } from "./tools/scene/preview";
 import { setAnimationTimingDef, setAnimationTimingImpl } from "./tools/animation/timing";
+import { addLineDef, addLineImpl } from "./tools/element/line";
+import { addBorderDef, addBorderImpl } from "./tools/element/border";
+import { editDurationDef, editDurationImpl } from "./tools/scene/duration";
+import { editTimingDef, editTimingImpl } from "./tools/scene/timing";
+import {
+  applyTemplateDef, applyTemplateImpl,
+  saveSceneAsTemplateDef, saveSceneAsTemplateImpl,
+  listTemplatesDef, listTemplatesImpl,
+  deleteTemplateDef, deleteTemplateImpl,
+  suggestTemplatesDef, suggestTemplatesImpl,
+} from "./tools/scene/templates";
 import { planSceneLayoutImpl, planSceneLayoutDef } from "./tools/scene/planLayout";
 import { validateElementPatch, checkTransparentBlackScreen } from "./tools/element/validatePatch";
 
@@ -907,6 +918,15 @@ export const toolDefinitions = [
   fitTextToBoxDef,
   previewSingleSceneDef,
   setAnimationTimingDef,
+  addLineDef,
+  addBorderDef,
+  editDurationDef,
+  editTimingDef,
+  applyTemplateDef,
+  saveSceneAsTemplateDef,
+  listTemplatesDef,
+  deleteTemplateDef,
+  suggestTemplatesDef,
 ] as const;
 
 function findScene(scenes: Scene[], sceneId: string): Scene {
@@ -1785,6 +1805,33 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
   },
   async set_animation_timing(args: any) {
     return setAnimationTimingImpl(args);
+  },
+  async add_line(args: any) {
+    return addLineImpl(args);
+  },
+  async add_border(args: any) {
+    return addBorderImpl(args);
+  },
+  async edit_duration(args: any) {
+    return editDurationImpl(args);
+  },
+  async edit_timing(args: any) {
+    return editTimingImpl(args);
+  },
+  async apply_template(args: any) {
+    return applyTemplateImpl(args);
+  },
+  async save_scene_as_template(args: any) {
+    return saveSceneAsTemplateImpl(args);
+  },
+  async list_templates(args: any = {}) {
+    return listTemplatesImpl(args);
+  },
+  async delete_template(args: any) {
+    return deleteTemplateImpl(args);
+  },
+  async suggest_templates(args: any = {}) {
+    return suggestTemplatesImpl(args);
   },
 };
 

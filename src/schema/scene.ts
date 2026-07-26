@@ -113,7 +113,7 @@ export const VideoElementSchema = z.object({
 export const ShapeElementSchema = z.object({
   ...BaseElementFields,
   type: z.literal("shape"),
-  shape: z.enum(["rectangle", "circle"]).default("rectangle"),
+  shape: z.enum(["rectangle", "circle", "line", "border"]).default("rectangle"),
   fill: z.string().default("#D97757"),
   gradient: GradientSchema.optional(),
   borderRadius: z.number().default(0),
