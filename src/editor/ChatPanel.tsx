@@ -514,6 +514,27 @@ function summarizeResult(payload: unknown, toolName?: string): string {
         return `${arr.length} elements${flagCount > 0 ? `, ${flagCount} flag${flagCount === 1 ? "" : "s"}` : ""}`;
       }
     }
+    if (toolName === "list_scenes") {
+      if (Array.isArray(payload)) {
+        return `${payload.length} scene${payload.length === 1 ? "" : "s"}`;
+      }
+    }
+    if (toolName === "get_scene") {
+      if (typeof obj.id === "string" && Array.isArray(obj.elements)) {
+        const parts: string[] = [];
+        if (typeof obj.index === "number" && typeof obj.totalScenes === "number") {
+          parts.push(`scene ${obj.index + 1}/${obj.totalScenes}`);
+        }
+        parts.push(`${(obj.elements as unknown[]).length} elements`);
+        return parts.join(", ");
+      }
+    }
+    if (toolName === "timeline_overview") {
+      if (typeof obj.totalDurationInFrames === "number") {
+        const dur = Number(obj.totalDurationInFrames);
+        return `${(dur / 30).toFixed(1)}s, ${Array.isArray(obj.scenes) ? (obj.scenes as unknown[]).length : "?"} scenes`;
+      }
+    }
 
     // Generic fallback: prefer the "what just got created" id.
     for (const key of ["elementId", "sceneId", "animationId", "url", "id"]) {

@@ -74,6 +74,26 @@ export const toolDefinitions = [
   {
     type: "function",
     function: {
+      name: "get_scene",
+      description:
+        "Get the COMPLETE state of a single scene: every element with all its fields (text, src, color, font, layout, zIndex), every animation, the incoming and outgoing transition, and the adjacent scene ids. " +
+        "Use this when you need the full data of one specific scene, not the overview of all scenes and not just an analysis. " +
+        "Complementary tools: list_scenes gives a one-line-per-element summary of every scene (cheap, but omits detail); review_scene gives a polish/flag analysis (good for catching issues, but skips raw data); " +
+        "get_scene is the answer for \"what exactly is in scene X right now?\" " +
+        "Pass includeAnimations: false only if you specifically need the response to be small.",
+      parameters: {
+        type: "object",
+        properties: {
+          sceneId: { type: "string", description: "Id of the scene to fetch. Get it from list_scenes or from a previous add_scene / build_scene result." },
+          includeAnimations: { type: "boolean", description: "Whether to include each element's animations array. Default true. Pass false only to keep the response tiny." },
+        },
+        required: ["sceneId"],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "add_scene",
       description: "Append a new scene to the end of the timeline.",
       parameters: {
@@ -953,6 +973,99 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
         durationInFrames: el.durationInFrames,
       })),
     }));
+  },
+
+  /**
+   * Fetch the full state of a single scene: every element with all its
+   * fields, every animation, the transition, and the surrounding scene
+   * context. This is the "show me the complete data of this scene, not
+   * just a flag list" tool — complementary to review_scene (which gives
+   * analysis) and list_scenes (which gives a one-line-per-element
+   * summary of every scene).
+   *
+   * Why this exists: agents routinely need to inspect or modify a
+   * specific scene's contents in detail (e.g. "what text content is in
+   * scene 2 right now?", "what's the source URL of the image in scene
+   * 3?", "what easing does the entrance use?"). list_scenes omits that
+   * detail; review_scene skips raw data in favor of polish flags. The
+   * model kept calling list_scenes and stitching together the answer
+   * from the truncated fields, which lost information. get_scene gives
+   * back the full element objects exactly as stored.
+   *
+   * includeAnimations: defaults true. The animations array can be large;
+   * pass false if you only need layout/static state. transitionIn and
+   * transitionOut are always included since they're rarely large.
+   *
+   * The response shape mirrors the Scene type as closely as is useful.
+   */
+  async get_scene(args: {
+    sceneId: string;
+    /** When false, omit element.animations to keep the response small. Default true. */
+    includeAnimations?: boolean;
+  }) {
+    const composition = sceneStore.get();
+    const scene = composition.scenes.find((s) => s.id === args.sceneId);
+    if (!scene) {
+      const known = composition.scenes.map((s) => s.id).join(", ");
+      throw new Error(
+        `get_scene: no scene with id "${args.sceneId}". Existing scene ids: ` +
+          (known ? known : "(none)"),
+      );
+    }
+    const index = composition.scenes.findIndex((s) => s.id === args.sceneId);
+    const includeAnimations = args.includeAnimations !== false;
+    return {
+      id: scene.id,
+      index,
+      name: scene.name,
+      durationInFrames: scene.durationInFrames,
+      backgroundColor: scene.backgroundColor,
+      /** Transition INTO this scene (set on the previous scene's transitionOut). */
+      transitionIn: scene.transitionIn ?? null,
+      /** Transition OUT of this scene into the next one. */
+      transitionOut: scene.transitionOut ?? null,
+      elements: scene.elements.map((el) => {
+        const base: Record<string, unknown> = {
+          id: el.id,
+          type: el.type,
+          name: el.name,
+          zIndex: "zIndex" in el ? (el as { zIndex?: number }).zIndex : undefined,
+          startFrame: el.startFrame,
+          durationInFrames: el.durationInFrames,
+          opacity: "opacity" in el ? (el as { opacity?: number }).opacity : undefined,
+        };
+        // Layout fields (x/y/w/h are percent, always per-element)
+        for (const k of ["x", "y", "width", "height"] as const) {
+          if (k in el) base[k] = (el as Record<string, unknown>)[k];
+        }
+        // Style fields common across visual elements
+        for (const k of [
+          "borderRadius",
+          "boxShadow",
+          "gradient",
+          "objectFit",
+          "backgroundColor",
+          "color",
+          "fontFamily",
+          "fontWeight",
+          "fontSize",
+          "textAlign",
+          "text",
+          "src",
+          "code",
+        ] as const) {
+          if (k in el) base[k] = (el as Record<string, unknown>)[k];
+        }
+        if (includeAnimations) {
+          base.animations = "animations" in el ? el.animations : [];
+        }
+        return base;
+      }),
+      /** Adjacent scenes so the agent can reason about sequence/pacing in one call. */
+      previousSceneId: index > 0 ? composition.scenes[index - 1].id : null,
+      nextSceneId: index < composition.scenes.length - 1 ? composition.scenes[index + 1].id : null,
+      totalScenes: composition.scenes.length,
+    };
   },
 
   async add_scene(args: { name: string; durationInFrames: number; backgroundColor?: string }) {

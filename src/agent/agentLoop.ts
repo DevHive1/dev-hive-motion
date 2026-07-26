@@ -66,6 +66,46 @@ export async function runAgent(
     userMessage,
   ];
 
+  // Verification gate: track scenes that were built (add_scene /
+  // build_scene) without a matching review_scene in the same loop.
+  // When the agent tries to declare "done" while at least one scene
+  // is unreviewed, we push a system-reminder back into the conversation
+  // asking the agent to review those scenes first. This addresses a
+  // real failure mode observed in production: small local models will
+  // happily build 8 scenes and say "I'm done" without ever calling
+  // review_scene - leaving the user to find every polish issue by eye.
+  //
+  // We ONLY nudge the agent; we don't refuse to let it finish. Two
+  // nudges in a row means we accept the result as-is rather than
+  // spinning forever on a model that won't review. This keeps the
+  // "controlled freedom, professional bar" promise: guidance is strong,
+  // refusal is not.
+  const unReviewedScenes = new Set<string>();
+  const completedSceneIds = new Set<string>();
+  let reviewNudgesIssued = 0;
+  const MAX_REVIEW_NUDGES = 1;
+
+  const pushReviewNudge = () => {
+    const ids = [...unReviewedScenes];
+    if (ids.length === 0) return false;
+    const list = ids.map((id) => `"${id}"`).join(", ");
+    messages.push({
+      role: "user",
+      content:
+        `[SYSTEM REMINDER] You built ${ids.length} scene${ids.length === 1 ? "" : "s"} ` +
+        `(${list}) without calling review_scene on them. The user will see ` +
+        `layering problems, missing transitions, and "fake hold-then-reveal" ` +
+        `timing if you skip this. Please call review_scene on each of these ` +
+        `scene IDs and act on any flags it returns (set_scene_transition for ` +
+        `missing transitions, update_element for layering, retiming the hero ` +
+        `startFrame for hold-then-reveal). You can also use get_scene to see ` +
+        `the full data of any one scene before deciding what to change. ` +
+        `Then you're truly done.`,
+    });
+    reviewNudgesIssued++;
+    return true;
+  };
+
   for (let iteration = 0; iteration < MAX_ITERATIONS; iteration++) {
     let response;
     try {
@@ -90,6 +130,14 @@ export async function runAgent(
     const toolCalls = message.tool_calls ?? [];
 
     if (toolCalls.length === 0) {
+      // Agent is trying to declare done - check if every built scene was reviewed.
+      // Only nudge if we haven't already nudged MAX_REVIEW_NUDGES times in
+      // this loop. If the model ignores two nudges, accept the result and
+      // let the user see it rather than loop forever.
+      if (unReviewedScenes.size > 0 && reviewNudgesIssued < MAX_REVIEW_NUDGES) {
+        pushReviewNudge();
+        continue;
+      }
       onEvent({ type: "final", text: message.content ?? "Done." });
       return messages;
     }
@@ -117,9 +165,36 @@ export async function runAgent(
       }
 
       try {
-        const result = await impl(args);
+        const result = (await impl(args)) as Record<string, unknown> | undefined;
         onEvent({ type: "tool_result", name, result });
         messages.push({ role: "tool", content: JSON.stringify(result) });
+
+        // Verification gate bookkeeping: track when the agent builds
+        // a scene or reviews one, so we can prompt for a final review
+        // pass before letting the agent declare "done".
+        if (result && typeof result === "object") {
+          // add_scene / build_scene both return { sceneId }
+          if ((name === "add_scene" || name === "build_scene") && typeof result.sceneId === "string") {
+            completedSceneIds.add(result.sceneId);
+            unReviewedScenes.add(result.sceneId);
+          }
+          // remove_scene clears any pending review for that id
+          if (name === "remove_scene" && typeof args.sceneId === "string") {
+            unReviewedScenes.delete(args.sceneId);
+            completedSceneIds.delete(args.sceneId);
+          }
+          // review_scene consumes the pending review for the scene it just reviewed
+          if (name === "review_scene" && typeof args.sceneId === "string") {
+            unReviewedScenes.delete(args.sceneId);
+          }
+          // timeline_overview implicitly reviews the whole composition
+          // (it's a project-wide read-only check). Treat it as clearing
+          // the unreviewed list - if the model remembered to call it,
+          // it has at least looked at the project end-to-end.
+          if (name === "timeline_overview") {
+            for (const id of completedSceneIds) unReviewedScenes.delete(id);
+          }
+        }
       } catch (err) {
         // Translate raw zod errors into actionable messages the model can
         // actually reason about. Without this, an "Expected number, received
