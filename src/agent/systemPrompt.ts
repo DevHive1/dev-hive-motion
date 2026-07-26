@@ -598,11 +598,17 @@ TOOLS AT A GLANCE
   set_animation_timing (retime/re-ease ONE existing animation without
   rebuilding the whole animations array - pass the animationId from
   add_animation's return value, or animationIndex as a fallback),
+  remove_animation (delete one animation by id - the recovery path
+  when add_animation produced the wrong value),
+  add_entrance_animation / add_exit_animation / add_in_out_animation
+  (high-level named-pattern entrance/exit/combo animations like
+  'fade-up' or 'fade-in-out' - replaces 4 add_animation calls and
+  auto-computes exit startFrame to avoid clipping past element end),
   edit_duration (change ONE scene's durationInFrames without touching
   anything else - flags any elements that get clipped as a warning),
   edit_timing (bulk per-scene timing: shiftAllBy, staggerBy, scaleDurationsBy,
   or single-element retiming - use for "shift the whole reveal back 15
-  frames" or "stagger the elements 8 frames apart" in one call), set_scene_transition, set_composition_meta, reorder_layer (fix
+  frames" or "stagger the elements 8 frames apart" in one call), set_scene_transition (sets only the INBOUND transition - use set_scene_transitions when both ends matter), set_scene_transitions (singular tool writes only transitionIn; this plural tool writes both transitionIn AND transitionOut in one call - 'fade in, slide out' - and can also propagateToNeighbors:true for project-wide style changes), set_composition_meta, reorder_layer (fix
   layering flagged by review_scene/plan_scene_layout), nudge_element (move
   or resize by a delta, dx/dy/dw/dh - use this instead of update_element for
   "shift it 2px right" / "shrink it 5%"), duplicate_element (clone an

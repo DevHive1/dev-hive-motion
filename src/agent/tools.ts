@@ -31,7 +31,10 @@ import { setOrientationDef, setOrientationImpl } from "./tools/orientation";
 import { reorderScenesDef, reorderScenesImpl } from "./tools/scene/reorder";
 import { moveSceneDef, moveSceneImpl } from "./tools/scene/move";
 import { setAllTransitionsDef, setAllTransitionsImpl } from "./tools/scene/transitions";
+import { setSceneTransitionsDef, setSceneTransitionsImpl } from "./tools/scene/setTransitions";
 import { animateSceneDef, animateSceneImpl } from "./tools/animation/batch";
+import { removeAnimationDef, removeAnimationImpl } from "./tools/animation/removeAnimation";
+import { addInOutAnimationImpl, addInOutAnimationDef, addEntranceAnimationImpl, addEntranceAnimationDef, addExitAnimationImpl, addExitAnimationDef } from "./tools/element/inOutAnimation";
 import { editByMentionDef, editByMentionImpl } from "./tools/element/mention";
 import { duplicateElementDef, duplicateElementImpl } from "./tools/element/duplicate";
 import { nudgeElementDef, nudgeElementImpl } from "./tools/element/nudge";
@@ -358,6 +361,10 @@ export const toolDefinitions = [
       },
     },
   },
+  addEntranceAnimationDef,
+  addExitAnimationDef,
+  addInOutAnimationDef,
+  removeAnimationDef,
   {
     type: "function",
     function: {
@@ -938,6 +945,7 @@ export const toolDefinitions = [
     },
   },
   setAllTransitionsDef,
+  setSceneTransitionsDef,
   duplicateElementDef,
   nudgeElementDef,
   timelineOverviewDef,
@@ -1353,6 +1361,22 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
     return { ok: true };
   },
 
+  async add_entrance_animation(args: any) {
+    return await addEntranceAnimationImpl(args);
+  },
+
+  async add_exit_animation(args: any) {
+    return await addExitAnimationImpl(args);
+  },
+
+  async add_in_out_animation(args: any) {
+    return await addInOutAnimationImpl(args);
+  },
+
+  async remove_animation(args: any) {
+    return await removeAnimationImpl(args);
+  },
+
   async set_scene_transition(args: {
     sceneId: string;
     type: "fade" | "slide" | "wipe" | "flip" | "clockWipe" | "none";
@@ -1372,6 +1396,10 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       return draft;
     });
     return { ok: true };
+  },
+
+  async set_scene_transitions(args: any) {
+    return await setSceneTransitionsImpl(args);
   },
 
   async set_composition_meta(args: { name?: string; fps?: number; width?: number; height?: number }) {
