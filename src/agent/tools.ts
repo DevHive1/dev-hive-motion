@@ -1,18 +1,19 @@
 import { nanoid } from "nanoid";
 import { sceneStore } from "../server/sceneStore";
-import type {
-  Animation,
-  ImageElement,
-  Scene,
-  ShapeElement,
-  TextElement,
-  VideoElement,
-  CustomElement,
-  AudioElement,
-  Composition,
-  SceneElement,
-  Transition,
-  Storyboard,
+import {
+  SceneElementSchema,
+  type Animation,
+  type ImageElement,
+  type Scene,
+  type ShapeElement,
+  type TextElement,
+  type VideoElement,
+  type CustomElement,
+  type AudioElement,
+  type Composition,
+  type SceneElement,
+  type Transition,
+  type Storyboard,
 } from "../schema/scene";
 import { duckDuckGoSearch } from "./providers/duckduckgo";
 import { searchStockPhotos, searchStockVideos } from "./providers/pexels";
@@ -25,13 +26,21 @@ import { generateVoiceover } from "./providers/edgeTts";
 import { searchFreeMusic } from "./providers/jamendo";
 import { searchSoundEffects } from "./providers/freesound";
 import { jinaReadUrl } from "./providers/jinaReader";
-import { computeLayoutFlags, type LayoutBox } from "./layoutCheck";
+import { computeLayoutFlags, analyzePolish, polishFlagStrings, type LayoutBox } from "./layoutCheck";
 import { setOrientationDef, setOrientationImpl } from "./tools/orientation";
 import { reorderScenesDef, reorderScenesImpl } from "./tools/scene/reorder";
 import { moveSceneDef, moveSceneImpl } from "./tools/scene/move";
 import { setAllTransitionsDef, setAllTransitionsImpl } from "./tools/scene/transitions";
 import { animateSceneDef, animateSceneImpl } from "./tools/animation/batch";
 import { editByMentionDef, editByMentionImpl } from "./tools/element/mention";
+import { duplicateElementDef, duplicateElementImpl } from "./tools/element/duplicate";
+import { nudgeElementDef, nudgeElementImpl } from "./tools/element/nudge";
+import { timelineOverviewDef, timelineOverviewImpl } from "./tools/scene/timeline";
+import { fitTextToBoxDef, fitTextToBoxImpl } from "./tools/element/fitText";
+import { previewSingleSceneDef, previewSingleSceneImpl } from "./tools/scene/preview";
+import { setAnimationTimingDef, setAnimationTimingImpl } from "./tools/animation/timing";
+import { planSceneLayoutImpl, planSceneLayoutDef } from "./tools/scene/planLayout";
+import { validateElementPatch, checkTransparentBlackScreen } from "./tools/element/validatePatch";
 
 /** Ollama/OpenAI-style tool definitions. Sent to the model on every turn. */
 export const toolDefinitions = [
@@ -562,7 +571,7 @@ export const toolDefinitions = [
     function: {
       name: "create_storyboard",
       description:
-        "Write the project's storyboard/plan BEFORE building anything - concept, narrative arc, mood direction, and a detailed scene-by-scene breakdown. Do this first for any real request ('a video about X', 'a promo for Y') so the build has a coherent, information-rich plan behind it instead of a couple of generic caption scenes. Research the topic first (web_search/wikipedia_lookup) so contentNotes has real facts, not placeholders. The user can view and download this plan. Overwrites any existing storyboard.",
+        "Write the project's storyboard/plan BEFORE building anything - concept, narrative arc, mood direction, creative brief, and a detailed scene-by-scene breakdown. Do this first for any real request ('a video about X', 'a promo for Y') so the build has a coherent, information-rich plan behind it instead of a couple of generic caption scenes. Research the topic first (web_search/wikipedia_lookup) so contentNotes has real facts, not placeholders. Pass a 'brief' with the project's genre, target platform, and designLanguage (palette/typeScale/margin) so every scene can hold to the same design language. Each scene should specify shotType, visualTreatment, targetDurationInFrames, and dependencies. The user can view and download this plan. Overwrites any existing storyboard.",
       parameters: {
         type: "object",
         properties: {
@@ -575,6 +584,40 @@ export const toolDefinitions = [
           moodDirection: {
             type: "string",
             description: "The specific visual/tonal direction for THIS project - colors, pacing, typography feel, energy level. Be concrete and specific to this project, not a generic description - this is what should make different projects look different from each other.",
+          },
+          brief: {
+            type: "object",
+            description: "The creative brief: who's it for, where will it play, what aspect ratio, what genre, and what design language to hold to. Pass aspectRatio and the tool will set the composition dimensions to match (so you don't have to call set_orientation separately).",
+            properties: {
+              targetAudience: { type: "string" },
+              platform: { type: "string", description: "e.g. 'YouTube', 'TikTok', 'LinkedIn', 'in-store display'." },
+              aspectRatio: { type: "string", enum: ["16:9", "9:16", "1:1", "4:3", "21:9"] },
+              targetDurationSeconds: { type: "number" },
+              genre: {
+                type: "string",
+                enum: ["corporate", "social-reel", "documentary", "cinematic", "kids", "product-launch", "educational", "other"],
+                description: "The closest match. Drives the type/motion/pacing recommendations in the design playbook.",
+              },
+              designLanguage: {
+                type: "object",
+                description: "Structured design language - palette, type pair, margin grid, type scale, motion vocabulary. Once set, plan_scene_layout will read these from the storyboard automatically (no need to pass designTokens on every call).",
+                properties: {
+                  palette: { type: "array", items: { type: "string" }, description: "2-4 hex colors: dominant field, accent, text. Don't pass more than 4." },
+                  typePair: {
+                    type: "object",
+                    properties: { display: { type: "string" }, body: { type: "string" } },
+                    description: "One display font and one body font. e.g. { display: 'Manrope', body: 'Inter' }.",
+                  },
+                  margin: { type: "number", description: "Edge margin in percent of canvas (0-20). Default 8." },
+                  typeScale: {
+                    type: "object",
+                    properties: { display: { type: "number" }, body: { type: "number" }, kicker: { type: "number" } },
+                    description: "Suggested sizes for display/headline, body, and kicker. e.g. { display: 72, body: 28, kicker: 18 }.",
+                  },
+                  motionVocabulary: { type: "array", items: { type: "string" }, description: "The motion techniques the project will use, e.g. ['fade-up', 'fade-in', 'ken-burns']." },
+                },
+              },
+            },
           },
           scenes: {
             type: "array",
@@ -592,6 +635,19 @@ export const toolDefinitions = [
                 keyElements: { type: "string", description: "The main visual elements planned for this scene, specific enough to build from." },
                 transitionNote: { type: "string", description: "How it enters from the previous scene, and why that fits." },
                 animationNote: { type: "string", description: "The specific motion planned - not just 'it animates in'." },
+                shotType: { type: "string", enum: ["establishing", "wide", "medium", "closeUp", "detail"] },
+                visualTreatment: { type: "string", description: "Free-form visual direction, e.g. 'split layout, image left, glass-panel-right with caption' or 'centered headline with two stat callouts below'." },
+                targetDurationInFrames: { type: "number", description: "How long this scene should be. e.g. 90 for 3s at 30fps." },
+                entranceCue: { type: "string", description: "What triggers this scene's entrance, e.g. 'after fade', 'after slide from right'." },
+                audioCue: {
+                  type: "object",
+                  properties: {
+                    kind: { type: "string", enum: ["voiceover", "music", "sfx", "silence"] },
+                    description: { type: "string" },
+                    startFrame: { type: "number" },
+                  },
+                },
+                dependencies: { type: "array", items: { type: "string" }, description: "Names of other scenes whose visual elements should carry over (e.g. recurring brand mark, character)." },
               },
               required: ["name", "purpose", "keyElements"],
             },
@@ -618,40 +674,8 @@ export const toolDefinitions = [
     type: "function",
     function: {
       name: "plan_scene_layout",
-      description:
-        "Work out and VALIDATE precise element positions/timing for a scene BEFORE building it - the fix for elements landing in the wrong place or outside the frame. Describe each element's role and either give it exact x/y, or position it relative to an earlier element in the same call (e.g. 'below the heading') and this computes the exact x/y for you - no coordinate math, no guessing. Returns the fully-resolved layout plus any flags (overlaps, out-of-bounds, nothing visible at frame 0) BEFORE anything is built. Use the resolved x/y/width/height/zIndex/startFrame values exactly as returned when you call build_scene/add_*_element/add_animation right after. For any scene with more than one or two elements, or any text sitting near/on a shape or image, do this before building rather than positioning elements by feel.",
-      parameters: {
-        type: "object",
-        properties: {
-          elements: {
-            type: "array",
-            description: "In the order you want them resolved - an element can only be positioned relative to one that appears EARLIER in this array.",
-            items: {
-              type: "object",
-              properties: {
-                role: { type: "string", description: "A short label you'll reference from later elements and when building, e.g. 'heading', 'subtitle', 'backgroundPanel'." },
-                type: { type: "string", enum: ["text", "image", "video", "shape", "custom", "audio"] },
-                width: { type: "number", description: "Percent of canvas width (0-100)." },
-                height: { type: "number", description: "Percent of canvas height (0-100)." },
-                x: { type: "number", description: "Percent of canvas width from the left. Omit if using relativeTo instead." },
-                y: { type: "number", description: "Percent of canvas height from the top. Omit if using relativeTo instead." },
-                relativeTo: { type: "string", description: "The 'role' of an EARLIER element in this same array to position against, instead of giving x/y directly." },
-                relation: {
-                  type: "string",
-                  enum: ["below", "above", "leftOf", "rightOf", "sameSpot"],
-                  description: "How this element relates to relativeTo. 'sameSpot' means same x/y (e.g. a text label centered on a shape) - give it a higher zIndex than what it sits on.",
-                },
-                gap: { type: "number", description: "Percent-of-canvas gap between this element and relativeTo. Default 2. Ignored for 'sameSpot'." },
-                zIndex: { type: "number", description: "Higher draws on top. Defaults to this element's position in the array (later = higher) if omitted." },
-                startFrame: { type: "number", description: "Default 0." },
-                durationInFrames: { type: "number" },
-              },
-              required: ["role", "type", "width", "height"],
-            },
-          },
-        },
-        required: ["elements"],
-      },
+      description: planSceneLayoutDef.function.description,
+      parameters: planSceneLayoutDef.function.parameters,
     },
   },
   {
@@ -814,12 +838,25 @@ export const toolDefinitions = [
     function: {
       name: "batch_update_scenes",
       description:
-        "Apply changes across ALL scenes in the composition at once (e.g. set background color or frame duration for all scenes).",
+        "Apply changes across MULTIPLE scenes in one call. Supports combining backgroundColor, durationInFrames, a transitionIn to apply to every scene boundary (so the whole video has a uniform feel), and a namePrefix/nameSuffix. Use this instead of calling update_scene 12 times for a project-wide change. The first scene has no incoming transition; pass skipFirst:true to leave it alone while applying a transition to all later scenes.",
       parameters: {
         type: "object",
         properties: {
           backgroundColor: { type: "string", description: "Hex/CSS background color to apply to all scenes (e.g. '#0a0e27')." },
-          durationInFrames: { type: "number", description: "Duration in frames to set for all scenes (e.g. 150)." },
+          durationInFrames: { type: "number", description: "Duration in frames to set for all scenes (e.g. 150). Must be > 0." },
+          transitionIn: {
+            type: "object",
+            description: "Apply the same transition to every scene boundary (or every scene except the first if skipFirst is true). type 'none' clears the transition on those scenes.",
+            properties: {
+              type: { type: "string", enum: ["fade", "slide", "wipe", "flip", "clockWipe", "none"] },
+              direction: { type: "string", enum: ["from-left", "from-right", "from-top", "from-bottom"] },
+              durationInFrames: { type: "number" },
+            },
+            required: ["type"],
+          },
+          namePrefix: { type: "string", description: "Prepend this string to every scene's name (e.g. 'v2 - ')." },
+          nameSuffix: { type: "string", description: "Append this string to every scene's name (e.g. ' (draft)')." },
+          skipFirst: { type: "boolean", description: "When applying transitionIn, leave the first scene's transition alone (it has no previous scene to transition from). Defaults to false." },
         },
       },
     },
@@ -864,6 +901,12 @@ export const toolDefinitions = [
     },
   },
   setAllTransitionsDef,
+  duplicateElementDef,
+  nudgeElementDef,
+  timelineOverviewDef,
+  fitTextToBoxDef,
+  previewSingleSceneDef,
+  setAnimationTimingDef,
 ] as const;
 
 function findScene(scenes: Scene[], sceneId: string): Scene {
@@ -1091,14 +1134,22 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
   },
 
   async update_element(args: { sceneId: string; elementId: string; patch: Record<string, unknown> }) {
+    let nextElement: SceneElement | undefined;
     await sceneStore.update((draft) => {
       const scene = findScene(draft.scenes, args.sceneId);
       const idx = scene.elements.findIndex((e) => e.id === args.elementId);
       if (idx === -1) throw new Error(`No element with id "${args.elementId}" in scene "${args.sceneId}".`);
-      scene.elements[idx] = { ...scene.elements[idx], ...args.patch } as typeof scene.elements[number];
+      const merged = { ...scene.elements[idx], ...args.patch };
+      // Validate the merged element against the schema. The agent used to hit
+      // silent failures here (e.g. durationInFrames:0, x:200) that broke
+      // rendering later with no useful error - now we fail fast with the
+      // exact fields and reasons, and the agent can fix the call.
+      validateElementPatch(args.sceneId, args.elementId, merged);
+      scene.elements[idx] = merged as typeof scene.elements[number];
+      nextElement = scene.elements[idx];
       return draft;
     });
-    return { ok: true };
+    return { ok: true, element: nextElement };
   },
 
   async remove_element(args: { sceneId: string; elementId: string }) {
@@ -1305,7 +1356,18 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       }
     }
 
-    return { sceneId };
+    // Bug #3 from error.txt: surface a transparent-black-screen warning
+    // here too so the agent sees it before moving on (review_scene is a
+    // separate explicit step, but the bug is common enough to deserve a
+    // hint at build time as well).
+    const builtScene = sceneStore.get().scenes.find((s) => s.id === sceneId);
+    const warnings: string[] = [];
+    if (builtScene) {
+      const blackScreen = checkTransparentBlackScreen(builtScene);
+      if (blackScreen) warnings.push(blackScreen);
+    }
+
+    return { sceneId, warnings };
   },
 
   async web_search(args: { query: string; maxResults?: number }) {
@@ -1340,6 +1402,20 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
     concept: string;
     narrativeArc?: string;
     moodDirection: string;
+    brief?: {
+      targetAudience?: string;
+      platform?: string;
+      aspectRatio?: "16:9" | "9:16" | "1:1" | "4:3" | "21:9";
+      targetDurationSeconds?: number;
+      genre?: "corporate" | "social-reel" | "documentary" | "cinematic" | "kids" | "product-launch" | "educational" | "other";
+      designLanguage?: {
+        palette?: string[];
+        typePair?: { display: string; body: string };
+        margin?: number;
+        typeScale?: { display: number; body: number; kicker: number };
+        motionVocabulary?: string[];
+      };
+    };
     scenes: Array<{
       name: string;
       purpose: string;
@@ -1348,6 +1424,12 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       keyElements: string;
       transitionNote?: string;
       animationNote?: string;
+      shotType?: "establishing" | "wide" | "medium" | "closeUp" | "detail";
+      visualTreatment?: string;
+      targetDurationInFrames?: number;
+      entranceCue?: string;
+      audioCue?: { kind: "voiceover" | "music" | "sfx" | "silence"; description: string; startFrame?: number };
+      dependencies?: string[];
     }>;
   }) {
     const storyboard: Storyboard = {
@@ -1355,6 +1437,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       concept: args.concept,
       narrativeArc: args.narrativeArc ?? "",
       moodDirection: args.moodDirection,
+      brief: args.brief as Storyboard["brief"],
       scenes: args.scenes.map((s) => ({
         name: s.name,
         purpose: s.purpose,
@@ -1363,12 +1446,46 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
         keyElements: s.keyElements,
         transitionNote: s.transitionNote ?? "",
         animationNote: s.animationNote ?? "",
+        shotType: s.shotType,
+        visualTreatment: s.visualTreatment ?? "",
+        targetDurationInFrames: s.targetDurationInFrames,
+        entranceCue: s.entranceCue ?? "",
+        audioCue: s.audioCue,
+        dependencies: s.dependencies ?? [],
       })),
     };
     await sceneStore.update((draft) => {
       draft.storyboard = storyboard;
       if (args.title && args.title.trim()) {
         draft.name = args.title.trim();
+      }
+      // If the brief specifies an aspect ratio, apply the corresponding
+      // preset to the composition dimensions. The agent shouldn't have
+      // to call set_orientation separately - the brief is the source
+      // of truth for format.
+      if (args.brief?.aspectRatio) {
+        const ratio = args.brief.aspectRatio;
+        if (ratio === "9:16") {
+          draft.orientation = "portrait";
+          draft.width = 1080;
+          draft.height = 1920;
+        } else if (ratio === "1:1") {
+          draft.orientation = "square";
+          draft.width = 1080;
+          draft.height = 1080;
+        } else if (ratio === "16:9") {
+          draft.orientation = "landscape";
+          draft.width = 1920;
+          draft.height = 1080;
+        } else if (ratio === "4:3") {
+          draft.orientation = "landscape";
+          draft.width = 1440;
+          draft.height = 1080;
+        } else if (ratio === "21:9") {
+          draft.orientation = "landscape";
+          draft.width = 2520;
+          draft.height = 1080;
+        }
       }
       return draft;
     });
@@ -1378,6 +1495,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
   async review_scene(args: { sceneId: string }) {
     const composition = sceneStore.get();
     const scene = findScene(composition.scenes, args.sceneId);
+    const sceneIndex = composition.scenes.findIndex((s) => s.id === args.sceneId);
 
     const visualTypes = new Set(["text", "image", "video", "shape", "custom"]);
     const visualElements = scene.elements.filter((el) => visualTypes.has(el.type)) as Array<
@@ -1400,133 +1518,35 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
 
     const flags = computeLayoutFlags(visualElements);
 
-    return { elements, flags };
+    // Bug #3 from error.txt: transparent background + nothing visible at
+    // frame 0 = black screen. Surface it as a flagged review item.
+    const blackScreenWarning = checkTransparentBlackScreen(scene);
+    if (blackScreenWarning) flags.push(blackScreenWarning);
+
+    // Polish gaps: text-only scenes, no-motion scenes, missing transitions.
+    // The agent's report explicitly listed these as things the model keeps
+    // forgetting - so the review tool surfaces them as concrete, actionable
+    // flags with the exact next tool to call.
+    const polish = analyzePolish({
+      elements: scene.elements.map((e) => ({ type: e.type, animations: "animations" in e ? e.animations : [] })),
+      backgroundColor: scene.backgroundColor,
+      transitionIn: scene.transitionIn ?? null,
+      // The transition INTO this scene is stored on the previous scene as
+      // its transitionOut, but we don't model that. The transition out of
+      // the previous scene into this one is the same as this scene's
+      // incoming transition from the user's perspective. We approximate
+      // by checking the previous scene's transitionIn vs this scene.
+      previousTransitionIn:
+        sceneIndex > 0 ? composition.scenes[sceneIndex - 1].transitionIn ?? null : undefined,
+      hasNextScene: sceneIndex < composition.scenes.length - 1,
+    });
+    flags.push(...polishFlagStrings(polish));
+
+    return { elements, flags, polish };
   },
 
-  async plan_scene_layout(args: {
-    elements: Array<{
-      role: string;
-      type: "text" | "image" | "video" | "shape" | "custom" | "audio";
-      width: number;
-      height: number;
-      x?: number;
-      y?: number;
-      relativeTo?: string;
-      relation?: "below" | "above" | "leftOf" | "rightOf" | "sameSpot";
-      gap?: number;
-      zIndex?: number;
-      startFrame?: number;
-      durationInFrames?: number;
-    }>;
-  }) {
-    const VALID_TYPES = new Set(["text", "image", "video", "shape", "custom", "audio"]);
-
-    const resolvedByRole = new Map<string, { x: number; y: number; width: number; height: number }>();
-    const resolvedElements: Array<{
-      role: string;
-      type: string;
-      x: number;
-      y: number;
-      width: number;
-      height: number;
-      zIndex: number;
-      startFrame: number;
-      durationInFrames: number | undefined;
-    }> = [];
-
-    args.elements.forEach((spec, index) => {
-      if (!VALID_TYPES.has(spec.type)) {
-        throw new Error(
-          `Element "${spec.role}" has an invalid type "${spec.type}" - must be exactly one of text, image, video, shape, custom, audio (no extra words).`,
-        );
-      }
-
-      let x = spec.x;
-      let y = spec.y;
-
-      if (spec.relativeTo) {
-        const ref = resolvedByRole.get(spec.relativeTo);
-        if (!ref) {
-          throw new Error(
-            `relativeTo "${spec.relativeTo}" (for element "${spec.role}") must be the role of an EARLIER element in this same call. Roles resolved so far: ${[...resolvedByRole.keys()].join(", ") || "(none)"}.`,
-          );
-        }
-        const gap = spec.gap ?? 2;
-        switch (spec.relation ?? "below") {
-          case "below":
-            x = ref.x;
-            y = ref.y + ref.height + gap;
-            break;
-          case "above":
-            x = ref.x;
-            y = ref.y - spec.height - gap;
-            break;
-          case "leftOf":
-            x = ref.x - spec.width - gap;
-            y = ref.y;
-            break;
-          case "rightOf":
-            x = ref.x + ref.width + gap;
-            y = ref.y;
-            break;
-          case "sameSpot":
-            x = ref.x;
-            y = ref.y;
-            break;
-        }
-      }
-
-      if (x === undefined || y === undefined) {
-        throw new Error(`Element "${spec.role}" needs either x/y or relativeTo+relation.`);
-      }
-
-      // Content that must actually be seen (text/image/video/custom) gets a
-      // hard rejection, not just a warning, if it's genuinely off-canvas -
-      // a soft flag can be (and in practice has been) ignored. Shapes are
-      // exempt: a blurred glow circle bleeding off the edge is a normal,
-      // deliberate technique, not a mistake.
-      if (spec.type !== "shape" && spec.type !== "audio") {
-        const overRight = x + spec.width - 100;
-        const overBottom = y + spec.height - 100;
-        if (x < -5 || y < -5 || overRight > 5 || overBottom > 5) {
-          throw new Error(
-            `Element "${spec.role}" (${spec.type}) resolves to x:${Math.round(x * 10) / 10}, y:${Math.round(y * 10) / 10}, width:${spec.width}, height:${spec.height} - that puts it mostly or entirely off-canvas. Content elements must stay within the 0-100 range (x + width <= 100, y + height <= 100). Adjust the position/size and call plan_scene_layout again.`,
-          );
-        }
-      }
-
-      resolvedByRole.set(spec.role, { x, y, width: spec.width, height: spec.height });
-      resolvedElements.push({
-        role: spec.role,
-        type: spec.type,
-        x: Math.round(x * 10) / 10,
-        y: Math.round(y * 10) / 10,
-        width: spec.width,
-        height: spec.height,
-        zIndex: spec.zIndex ?? index,
-        startFrame: spec.startFrame ?? 0,
-        durationInFrames: spec.durationInFrames,
-      });
-    });
-
-    const boxes: LayoutBox[] = resolvedElements
-      .filter((el) => el.type !== "audio")
-      .map((el) => ({
-        id: el.role,
-        name: el.role,
-        type: el.type,
-        x: el.x,
-        y: el.y,
-        width: el.width,
-        height: el.height,
-        zIndex: el.zIndex,
-        startFrame: el.startFrame,
-        opacity: 1,
-      }));
-
-    const flags = computeLayoutFlags(boxes);
-
-    return { resolvedElements, flags };
+  async plan_scene_layout(args: any) {
+    return planSceneLayoutImpl(args);
   },
 
   async reorder_layer(args: { sceneId: string; elementId: string; position: "front" | "back" }) {
@@ -1656,15 +1676,54 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
     return { globalAudio: composition.globalAudio ?? [] };
   },
 
-  async batch_update_scenes(args: { backgroundColor?: string; durationInFrames?: number }) {
+  async batch_update_scenes(args: {
+    backgroundColor?: string;
+    durationInFrames?: number;
+    transitionIn?: {
+      type: "fade" | "slide" | "wipe" | "flip" | "clockWipe" | "none";
+      direction?: "from-left" | "from-right" | "from-top" | "from-bottom";
+      durationInFrames?: number;
+    };
+    namePrefix?: string;
+    nameSuffix?: string;
+    skipFirst?: boolean;
+  }) {
+    const updated: string[] = [];
+    const skipped: string[] = [];
     await sceneStore.update((draft) => {
-      draft.scenes.forEach((scene) => {
+      draft.scenes.forEach((scene, index) => {
+        // First scene has no incoming transition; skipTransitionFirst lets
+        // you apply a uniform transition to all boundaries except the very
+        // first one (which has no previous scene to transition from).
+        if (args.transitionIn) {
+          if (args.skipFirst && index === 0) {
+            skipped.push(scene.id);
+          } else if (args.transitionIn.type === "none") {
+            scene.transitionIn = undefined;
+          } else {
+            scene.transitionIn = {
+              type: args.transitionIn.type,
+              direction: args.transitionIn.direction ?? "from-right",
+              durationInFrames: args.transitionIn.durationInFrames ?? 15,
+            };
+          }
+        }
         if (args.backgroundColor) scene.backgroundColor = args.backgroundColor;
-        if (args.durationInFrames && args.durationInFrames > 0) scene.durationInFrames = args.durationInFrames;
+        if (typeof args.durationInFrames === "number" && args.durationInFrames > 0) {
+          scene.durationInFrames = args.durationInFrames;
+        }
+        if (args.namePrefix) scene.name = args.namePrefix + scene.name;
+        if (args.nameSuffix) scene.name = scene.name + args.nameSuffix;
+        updated.push(scene.id);
       });
       return draft;
     });
-    return { success: true, sceneCount: sceneStore.get().scenes.length };
+    return {
+      success: true,
+      sceneCount: updated.length,
+      skippedTransitionCount: skipped.length,
+      updatedSceneIds: updated,
+    };
   },
 
   // ─── find_sound_effect definition (toolDefinitions array) lives in the big
@@ -1698,6 +1757,24 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
   },
   async edit_by_mention(args: any) {
     return editByMentionImpl(args);
+  },
+  async duplicate_element(args: any) {
+    return duplicateElementImpl(args);
+  },
+  async nudge_element(args: any) {
+    return nudgeElementImpl(args);
+  },
+  async timeline_overview(args: any = {}) {
+    return timelineOverviewImpl(args);
+  },
+  async fit_text_to_box(args: any) {
+    return fitTextToBoxImpl(args);
+  },
+  async preview_single_scene(args: any) {
+    return previewSingleSceneImpl(args);
+  },
+  async set_animation_timing(args: any) {
+    return setAnimationTimingImpl(args);
   },
 };
 

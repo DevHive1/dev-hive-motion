@@ -4,6 +4,7 @@ import { toolDefinitions, toolImplementations } from "./tools";
 import { promptEngine } from "./prompt/PromptEngine";
 import { ChainOfThought } from "./reasoning/ChainOfThought";
 import { sceneStore } from "../store/compositionStore";
+import { coerceToolCall } from "./coerce";
 
 export type AgentEvent =
   | { type: "thinking"; text: string }
@@ -92,7 +93,16 @@ export async function runAgent(
 
     for (const call of toolCalls) {
       const name = call.function.name;
-      const args = call.function.arguments as Record<string, unknown>;
+      // Coerce stringified numbers/booleans to their proper types before
+      // the tool sees them - small Ollama models sometimes pass "60"
+      // instead of 60 in nested object args, which used to fail with
+      // raw zod "Expected number, received string" errors that the
+      // agent couldn't reason about. See src/agent/coerce.ts.
+      const args = coerceToolCall(
+        name,
+        (call.function.arguments ?? {}) as Record<string, unknown>,
+        toolDefinitions as unknown as readonly { function: { name: string; parameters?: Record<string, unknown> } }[],
+      );
       onEvent({ type: "tool_call", name, args });
 
       const impl = toolImplementations[name];
@@ -108,7 +118,13 @@ export async function runAgent(
         onEvent({ type: "tool_result", name, result });
         messages.push({ role: "tool", content: JSON.stringify(result) });
       } catch (err) {
-        const error = err instanceof Error ? err.message : String(err);
+        // Translate raw zod errors into actionable messages the model can
+        // actually reason about. Without this, an "Expected number, received
+        // string" at path scenes[11].elements[11].durationInFrames is
+        // useless to a model - with this, it sees the exact field and the
+        // reason, and knows to re-issue the call with a number.
+        const raw = err instanceof Error ? err.message : String(err);
+        const error = translateToolError(raw);
         onEvent({ type: "tool_error", name, error });
         messages.push({ role: "tool", content: JSON.stringify({ error }) });
       }
@@ -120,4 +136,64 @@ export async function runAgent(
     message: `Stopped after ${MAX_ITERATIONS} steps without a final answer - request may be too large.`,
   });
   return messages;
+}
+
+/**
+ * Translate a raw error message - often a ZodError JSON dump from
+ * CompositionSchema.parse in the store - into a single human-readable
+ * line. The model sees this and can re-issue a corrected call instead
+ * of staring at a 200-line JSON zod report.
+ */
+function translateToolError(raw: string): string {
+  // Try to parse as a zod issues array. The store wraps ZodError.message
+  // as JSON.stringify of the issues array.
+  type ZodIssue = {
+    code?: string;
+    expected?: string;
+    received?: string;
+    path?: Array<string | number>;
+    message?: string;
+  };
+  let issues: ZodIssue[] | null = null;
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      issues = parsed as ZodIssue[];
+    } else if (
+      parsed !== null &&
+      typeof parsed === "object" &&
+      Array.isArray((parsed as { issues?: unknown }).issues)
+    ) {
+      issues = (parsed as { issues: ZodIssue[] }).issues;
+    }
+  } catch {
+    // not JSON - fall through
+  }
+
+  if (issues && issues.length > 0) {
+    const first = issues[0];
+    const path = (first.path ?? []).map(String).join(".");
+    if (first.code === "invalid_type" && first.expected && first.received) {
+      const where = path ? `${path}` : "input";
+      return `Invalid type at ${where}: expected ${first.expected}, got ${first.received}. Re-call with a proper ${first.expected} value.`;
+    }
+    if (first.code === "too_small" && first.message) {
+      return `Value too small at ${path || "input"}: ${first.message}`;
+    }
+    if (first.code === "too_big" && first.message) {
+      return `Value too large at ${path || "input"}: ${first.message}`;
+    }
+    if (first.message) {
+      return `Validation failed at ${path || "input"}: ${first.message}`;
+    }
+  }
+
+  // Not a zod error. Look for common patterns.
+  if (raw.includes("not found") || raw.includes("Could not find")) {
+    return `Reference not found. ${raw.split("\n")[0]}`;
+  }
+  if (raw.length > 400) {
+    return raw.slice(0, 380) + "... (truncated)";
+  }
+  return raw;
 }
