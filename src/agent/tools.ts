@@ -55,6 +55,7 @@ import { validateElementPatch, checkTransparentBlackScreen } from "./tools/eleme
 import { backgroundRemovalImpl, backgroundRemovalDef } from "./tools/image/removeBackground";
 import { sequentialThinkingImpl, sequentialThinkingDef } from "./tools/reasoning/sequentialThinking";
 import { diagnoseSceneImpl, diagnoseSceneDef } from "./tools/scene/diagnose";
+import { auditSceneImpl, auditSceneDef } from "./tools/scene/audit";
 
 /** Ollama/OpenAI-style tool definitions. Sent to the model on every turn. */
 export const toolDefinitions = [
@@ -943,6 +944,7 @@ export const toolDefinitions = [
   fitTextToBoxDef,
   previewSingleSceneDef,
   diagnoseSceneDef,
+  auditSceneDef,
   setAnimationTimingDef,
   addLineDef,
   addBorderDef,
@@ -1948,6 +1950,10 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
 
   async diagnose_scene(args: any) {
     return await diagnoseSceneImpl(args);
+  },
+
+  async audit_scene(args: any) {
+    return await auditSceneImpl(args);
   },
   async set_animation_timing(args: any) {
     return setAnimationTimingImpl(args);

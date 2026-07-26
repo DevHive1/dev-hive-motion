@@ -85,6 +85,48 @@ round of edit_timing didn't fix it, the next call is diagnose_scene,
 not another edit_timing. Two failed timing edits without diagnose_scene
 in between is a pattern that wastes steps and confuses the model.
 
+LAYOUT-LOGIC FAILURES (the text-on-button problem). review_scene checks
+polish gaps and diagnose_scene checks timing budgets. Neither checks
+COMPOSITIONAL LOGIC — the spatial relationships between elements. When
+the user reports "the text isn't on the button", "the cards are stacked
+weirdly", "the background shape is covering the text", "this card is
+smaller than its title", "the elements aren't distributed evenly",
+or any visual problem where the obvious fix (update_element / move /
+rearrange z-order) didn't fix it, the root cause is usually one of
+these structural layout problems:
+
+A. TEXT-OFF-SHAPE: a text element is positioned inside a shape (button,
+   card, badge) but not centred on it. The user probably meant the text
+   to be ON the button. Fix: update_element with x/y that centre the
+   text inside the shape.
+B. TEXT-OUTSIDE-SHAPE: text overflows its parent shape by several
+   percentage points. Either expand the shape or shrink/relocate the text.
+C. PARENT-NARROWER-THAN-CHILD: a shape is smaller than the text inside
+   it. Resize the shape so the text fits, or shrink the text.
+D. BACK-SHAPE-OVER-TEXT: a shape has a higher zIndex than the text on
+   top of it - the text gets hidden. Fix: reorder_layer on the text.
+E. OVERLAPPING-SIBLINGS: two elements of the same type at identical
+   bounds — one is rendering on top of the other for no reason.
+F. STACKED-TEXT-WITHOUT-RELATION: 2+ text elements stacked vertically
+   with no grouping shape — likely meant to be inside a card.
+G. INCONSISTENT-SPACING: gaps between elements in the same row vary
+   significantly, breaking the visual rhythm.
+H. NAME-COLLISION: two elements share the same 'name' field, which makes
+   update_element.byName ambiguous.
+
+When ANY of these symptoms come up, call audit_scene FIRST. It returns
+a structured report with the offending elements, exact pixel coordinates,
+and a concrete suggested update_element patch for each issue. Don't
+guess; let audit_scene tell you exactly which element to move where.
+After acting on its suggestions, call it again to confirm the layout is
+clean.
+
+The diagnostic-test-then-fix pattern: review_scene first (polish),
+diagnose_scene if timing, audit_scene if positioning. Each catches a
+class of issues the others don't. If a user complaint doesn't fit
+either obvious category, ask which tool's symptom list it matches
+before reaching for blind updates.
+
 The user watches videos, not scene graphs. They will call out anything
 that looks broken on screen even if every flag was technically happy.
 These three tools - review_scene, timeline_overview, preview_single_scene
@@ -608,6 +650,18 @@ TOOLS AT A GLANCE
     the offending element, the exact frame it ends, the scene end
     frame, the overshoot in frames, and a concrete suggested tool
     call. Don't loop on edit_timing; reach for diagnose_scene.
+  - audit_scene — root-cause layout-logic analysis for one scene.
+    Call this when the user reports a visual placement problem
+    ('the text isn't on the button', 'the background is covering
+    the text', 'the card is too narrow for its label', 'cards are
+    stacked weirdly') AND update_element alone didn't fix it.
+    audit_scene catches: text not centred on its container shape,
+    text overflowing its parent, parent narrower than child, back-
+    shape-over-text (z-order inverted), overlapping siblings,
+    stacked text with no grouping shape, inconsistent row spacing,
+    name collisions. Every issue includes a concrete update_element
+    / reorder_layer patch with exact coords. Don't loop on blind
+    moves; reach for audit_scene.
   - timeline_overview — no mutations: total duration, every scene's
     start/end, transition list, and pacing notes. Call this when
     mentally computing "scene 1 is 0-150, scene 2 is 150-300, ..." or

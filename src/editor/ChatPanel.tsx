@@ -596,6 +596,14 @@ function summarizeResult(payload: unknown, toolName?: string): string {
         return `${obj.headline} (${errors} error${errors === 1 ? "" : "s"})`;
       }
     }
+    if (toolName === "audit_scene") {
+      if (typeof obj.severityCounts === "object" && obj.severityCounts !== null) {
+        const c = obj.severityCounts as { errors: number; warnings: number };
+        if (c.errors > 0) return `${c.errors} layout error${c.errors === 1 ? "" : "s"}`;
+        if (c.warnings > 0) return `${c.warnings} layout warning${c.warnings === 1 ? "" : "s"}`;
+        return "layout clean";
+      }
+    }
     if (toolName === "plan_scene_layout") {
       if (Array.isArray(obj.resolvedElements)) {
         const arr = obj.resolvedElements as unknown[];
