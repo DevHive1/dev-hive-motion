@@ -336,7 +336,7 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
                   </span>
                   <span className="chat-item-op-name">{item.name}</span>
                   {item.outcome && item.outcome.ok && (
-                    <span className="chat-item-op-summary">{summarizeResult(item.outcome.payload)}</span>
+                    <span className="chat-item-op-summary">{summarizeResult(item.outcome.payload, item.name)}</span>
                   )}
                   {item.outcome && !item.outcome.ok && (
                     <span className="chat-item-op-summary error">{item.outcome.error}</span>
@@ -410,13 +410,76 @@ export const ChatPanel: React.FC<ChatPanelProps> = ({
  *   { ok: true, elementId: "el-abc" } -> "el-abc"
  *   { sceneId: "scene-1" } -> "scene-1"
  */
-function summarizeResult(payload: unknown): string {
+function summarizeResult(payload: unknown, toolName?: string): string {
   if (payload === null || payload === undefined) return "";
   if (typeof payload === "string") return payload;
   if (typeof payload === "number" || typeof payload === "boolean") return String(payload);
   if (typeof payload === "object") {
     const obj = payload as Record<string, unknown>;
-    // Prefer the "what just got created" id.
+
+    // Tool-aware summaries. The point: when the agent says "I added a
+    // calm black screen that transforms into the image", the user should
+    // be able to glance at the Operation card and see *what actually
+    // happened* (the real startFrame, the real transition type, etc.)
+    // - not just "el-abc". A short readable sentence makes "the agent
+    // claimed X but actually did Y" obvious at a glance.
+    if (toolName === "add_image_element" || toolName === "add_video_element") {
+      if (typeof obj.elementId === "string") {
+        const start = obj.startFrame;
+        const dur = obj.durationInFrames;
+        const parts = [`${obj.elementId}`];
+        if (typeof start === "number") parts.push(`starts at frame ${start}`);
+        if (typeof dur === "number") parts.push(`runs ${dur} frames`);
+        return parts.join(" - ");
+      }
+    }
+    if (toolName === "add_text_element" || toolName === "add_shape_element" || toolName === "add_custom_element") {
+      if (typeof obj.elementId === "string") {
+        const start = obj.startFrame;
+        const parts = [`${obj.elementId}`];
+        if (typeof start === "number") parts.push(`starts at frame ${start}`);
+        return parts.join(" - ");
+      }
+    }
+    if (toolName === "add_animation" || toolName === "set_animation_timing") {
+      if (typeof obj.animationId === "string") {
+        const applied = obj.applied as Record<string, unknown> | undefined;
+        if (applied && typeof applied === "object") {
+          const fields = Object.entries(applied)
+            .map(([k, v]) => `${k}=${typeof v === "number" ? v : v}`)
+            .join(", ");
+          return `${obj.animationId} (${fields})`;
+        }
+        return obj.animationId;
+      }
+    }
+    if (toolName === "set_scene_transition" || toolName === "set_all_transitions") {
+      if (typeof obj.transitionIn === "object" && obj.transitionIn !== null) {
+        const t = obj.transitionIn as Record<string, unknown>;
+        return `${t.type ?? "transition"}${typeof t.durationInFrames === "number" ? " " + t.durationInFrames + "f" : ""}`;
+      }
+    }
+    if (toolName === "build_scene") {
+      if (typeof obj.sceneId === "string" && typeof obj.elementCount === "number") {
+        return `${obj.elementCount} elements added`;
+      }
+    }
+    if (toolName === "review_scene") {
+      if (typeof obj.polish === "object" && obj.polish !== null) {
+        const p = obj.polish as Record<string, boolean>;
+        const count = Object.values(p).filter(Boolean).length;
+        return count === 0 ? "all clean" : `${count} flag${count === 1 ? "" : "s"}`;
+      }
+    }
+    if (toolName === "plan_scene_layout") {
+      if (Array.isArray(obj.resolvedElements)) {
+        const arr = obj.resolvedElements as unknown[];
+        const flagCount = Array.isArray(obj.flags) ? (obj.flags as unknown[]).length : 0;
+        return `${arr.length} elements${flagCount > 0 ? `, ${flagCount} flag${flagCount === 1 ? "" : "s"}` : ""}`;
+      }
+    }
+
+    // Generic fallback: prefer the "what just got created" id.
     for (const key of ["elementId", "sceneId", "animationId", "url", "id"]) {
       if (typeof obj[key] === "string") return obj[key] as string;
     }

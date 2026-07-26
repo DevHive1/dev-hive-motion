@@ -642,7 +642,13 @@ export const planSceneLayoutImpl = async (rawArgs: any) => {
 
   // Polish preview: would review_scene flag this scene once it's built?
   const polishElements = resolved.map((el) => ({
+    id: el.role,
     type: el.type,
+    x: el.x,
+    y: el.y,
+    width: el.width,
+    height: el.height,
+    startFrame: el.startFrame,
     animations: el.animations,
   }));
   const polish: PolishFlags = analyzePolish({

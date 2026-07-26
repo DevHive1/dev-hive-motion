@@ -286,6 +286,55 @@ this is what makes motion feel designed rather than mechanical. A
 flat 1.0→1.0 opacity with a uniform 30-frame easeInOut on every
 element is the AI-generated look you are explicitly trying to avoid.
 
+MAP USER LANGUAGE TO TIMING. The user's words are the most reliable
+spec they will give you. Match them to a specific pattern, not to a
+default "fade in":
+
+- "calm ... transforms into ..." / "stillness ... then ..." / "a quiet
+  moment before ..." / "the lights go down on ...": this is a HOLD
+  THEN REVEAL. Set transitionIn = { type: "none" } on the scene (a
+  fade-in would be a lie - the user said "calm", not "smooth entry").
+  Hold the black/dark background for 20-40 frames (no elements
+  visible). Then bring the hero element in with startFrame = hold
+  duration, opacity 0→1 over 18-30 frames with easeOut. The "calm"
+  IS the hold. Without the hold, you have not done what the user
+  asked for. If a build_scene review reports the hero element is
+  visible from frame 0, you have NOT done a hold-then-reveal - the
+  startFrame is wrong.
+- "appears" / "reveals itself" / "shows up" / "is unveiled": same as
+  above (hold + reveal), or a hard cut at startFrame with a short
+  8-12 frame fade-up if the user implies instant presence.
+- "drifts in" / "glides in" / "slides in": translation animation
+  (property: x or y, from outside the canvas, to its final position),
+  24-40 frames, easeOut. NOT an opacity fade - the user said the
+  thing moves, not that it materialises.
+- "punches in" / "slams in" / "hits": fast scale 1.4→1.0 OR
+  translate from -20% to 0, 8-12 frames, easeOut. The "punch" is in
+  the speed, not the duration.
+- "settles" / "finds its place" / "comes to rest": easeInOut over
+  30-40 frames, slight overshoot (property: scale, 1.08→1.0 with
+  backOut) is right. NO opacity change.
+- "flashes" / "blinks" / "pulses": opacity 1→0→1 over 8-16 frames,
+  no translation. Often used as a transition cue.
+- "lingers" / "stays" / "holds": no entrance animation, no exit
+  animation. startFrame = 0, durationInFrames = full scene. The
+  element is just THERE. This is the default if the user does not
+  mention motion at all - do not invent a fade-in.
+- "fades" (used as a verb about an element, not a transition between
+  scenes): opacity 1→0, 18-30 frames, easeIn. Not a fade-in (which
+  is opacity 0→1). Direction matters.
+
+When the user's words are ambiguous, prefer HOLD (no animation) over
+fade-in. A still element is honest; a fake fade-in is animation you
+added that the user did not ask for and the design playbook calls
+out as an AI-generated tell.
+
+When you need to retime an animation after the fact - the hold is
+too short, the fade is too long, the easing is wrong - use
+set_animation_timing. It takes the animationId from add_animation's
+return value and patches startFrame / durationInFrames / delay /
+easing without rebuilding the whole animations array.
+
 Rhythm across scenes. Pacing variety within a project is good;
 pacing chaos is not. Pick 2-3 base entrance durations (e.g. "fast
 12f / standard 18f / dramatic 28f") and use them consistently across

@@ -1523,12 +1523,22 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
     const blackScreenWarning = checkTransparentBlackScreen(scene);
     if (blackScreenWarning) flags.push(blackScreenWarning);
 
-    // Polish gaps: text-only scenes, no-motion scenes, missing transitions.
-    // The agent's report explicitly listed these as things the model keeps
-    // forgetting - so the review tool surfaces them as concrete, actionable
-    // flags with the exact next tool to call.
+    // Polish gaps: text-only scenes, no-motion scenes, missing transitions,
+    // and the "fake hold-then-reveal" pattern (hero at startFrame 0 with
+    // an opacity 0->1 fade). The agent's report explicitly listed these as
+    // things the model keeps forgetting - so the review tool surfaces them
+    // as concrete, actionable flags with the exact next tool to call.
     const polish = analyzePolish({
-      elements: scene.elements.map((e) => ({ type: e.type, animations: "animations" in e ? e.animations : [] })),
+      elements: scene.elements.map((e) => ({
+        id: e.id,
+        type: e.type,
+        x: e.x,
+        y: e.y,
+        width: e.width,
+        height: e.height,
+        startFrame: e.startFrame,
+        animations: "animations" in e ? e.animations : [],
+      })),
       backgroundColor: scene.backgroundColor,
       transitionIn: scene.transitionIn ?? null,
       // The transition INTO this scene is stored on the previous scene as

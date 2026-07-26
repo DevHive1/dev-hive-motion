@@ -19,8 +19,20 @@ export interface LayoutBox {
  */
 export interface ScenePolishInput {
   elements: Array<{
+    id?: string;
     type: string;
-    animations?: unknown[];
+    x?: number;
+    y?: number;
+    width?: number;
+    height?: number;
+    startFrame?: number;
+    animations?: Array<{
+      property?: string;
+      from?: number;
+      to?: number;
+      startFrame?: number;
+      durationInFrames?: number;
+    }>;
   }>;
   backgroundColor?: string;
   transitionIn?: { type?: string; durationInFrames?: number } | null;
@@ -41,6 +53,16 @@ export interface PolishFlags {
   missingIncomingTransition: boolean;
   /** Scene has a next scene but no transition out of this scene. */
   missingOutgoingTransition: boolean;
+  /**
+   * The largest non-text element starts at frame 0 AND uses an opacity
+   * 0→1 fade-in. This is the "fake hold-then-reveal" pattern - the user
+   * sees the image fading in over the background instead of an
+   * intentional hold of black / calm background before the hero arrives.
+   * Fix: set the hero element's startFrame to the hold duration (e.g.
+   * 30-45 frames) and start its opacity animation at the same time, so
+   * the background is visible alone for the hold, then the hero reveals.
+   */
+  heroElementStartsAtFrameZero: boolean;
 }
 
 export function analyzePolish(scene: ScenePolishInput): PolishFlags {
@@ -81,7 +103,45 @@ export function analyzePolish(scene: ScenePolishInput): PolishFlags {
       scene.previousTransitionIn === null,
     missingOutgoingTransition:
       Boolean(scene.hasNextScene) && scene.transitionIn == null,
+    heroElementStartsAtFrameZero: detectFakeHoldReveal(scene.elements),
   };
+}
+
+/**
+ * Detect the "fake hold-then-reveal" pattern: the most prominent
+ * non-text element starts at frame 0 with an opacity 0→1 animation.
+ * This is the pattern that produces "no calm black screen" - the
+ * background is technically visible alone during the first few frames
+ * but the eye reads it as a fade-in, not a hold.
+ *
+ * A real hold-then-reveal has startFrame > 0 on the hero element AND
+ * its opacity animation starting at the same frame, so the background
+ * is alone for the entire hold period.
+ */
+function detectFakeHoldReveal(
+  elements: NonNullable<ScenePolishInput["elements"]>,
+): boolean {
+  // Pick the biggest non-text element - that's the "hero" of the scene.
+  const nonText = elements.filter(
+    (e) => e.type !== "text" && typeof e.width === "number" && typeof e.height === "number",
+  );
+  if (nonText.length === 0) return false;
+  const hero = nonText.reduce((biggest, el) => {
+    const a = (el.width ?? 0) * (el.height ?? 0);
+    const b = (biggest.width ?? 0) * (biggest.height ?? 0);
+    return a > b ? el : biggest;
+  });
+  // Hero starts at frame 0.
+  if ((hero.startFrame ?? 0) > 0) return false;
+  // Hero has an opacity animation that goes 0 → 1.
+  const anims = Array.isArray(hero.animations) ? hero.animations : [];
+  const hasOpacityFadeIn = anims.some(
+    (a) =>
+      a?.property === "opacity" &&
+      (a.from ?? 0) === 0 &&
+      (a.to ?? 0) === 1,
+  );
+  return hasOpacityFadeIn;
 }
 
 /**
@@ -122,6 +182,19 @@ export function polishFlagStrings(flags: PolishFlags): string[] {
     out.push(
       "This scene has a next scene but no transition out - the cut to the next scene will feel abrupt. " +
         "Call set_scene_transition on the NEXT scene to add an incoming transition, or set_all_transitions to apply one type to all boundaries.",
+    );
+  }
+  if (flags.heroElementStartsAtFrameZero) {
+    out.push(
+      "The largest non-text element (the hero) starts at frame 0 with an opacity 0→1 fade. " +
+        "This is a fake hold-then-reveal - the background is visible only during the first few frames of the fade, " +
+        "so the eye reads it as a fade-in, not as a deliberate 'calm' hold. " +
+        "If the user asked for a hold/calm/quiet moment, or if the scene is the opening of the project, " +
+        "set the hero element's startFrame to the hold duration (30-45 frames for a 1-1.5s calm beat) " +
+        "and move its opacity animation's startFrame to the same value. " +
+        "Then the background sits alone for the hold, then the hero reveals. " +
+        "Also: if the user said 'calm/quiet/transforms into/stillness before', set this scene's transitionIn to { type: 'none' } - " +
+        "a fade-in transition contradicts 'calm'.",
     );
   }
   return out;
