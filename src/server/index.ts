@@ -11,6 +11,7 @@ import { runAgent } from "../agent/agentLoop";
 import { ollama, DEFAULT_OLLAMA_MODEL } from "../agent/ollamaClient";
 import { CompositionSchema } from "../schema/scene";
 import { renderComposition, RENDERS_DIR, type RenderFormat } from "./render";
+import { renderSingleScene } from "./renderSingleScene";
 
 const app = express();
 const httpServer = createServer(app);
@@ -222,6 +223,46 @@ app.post("/api/render", async (req, res) => {
 
   res.write("event: done\ndata: {}\n\n");
   res.end();
+});
+
+// Single-scene preview render (preview_single_scene tool). Streams progress
+// over SSE so the agent / UI can show a spinner, then returns the file URL.
+app.post("/api/render/scene", async (req, res) => {
+  const { sceneId, format } = req.body as { sceneId?: string; format?: "mp4" | "gif" };
+  if (!sceneId) {
+    res.status(400).json({ error: "Missing 'sceneId' in request body." });
+    return;
+  }
+
+  // Verify the scene exists in the current composition before kicking
+  // off a 30s+ render.
+  const composition = compositionStore.get();
+  const scene = composition.scenes.find((s) => s.id === sceneId);
+  if (!scene) {
+    res.status(404).json({ error: `No scene with id "${sceneId}".` });
+    return;
+  }
+
+  res.set({
+    "Content-Type": "text/event-stream",
+    "Cache-Control": "no-cache",
+    Connection: "keep-alive",
+  });
+  res.flushHeaders();
+
+  try {
+    const result = await renderSingleScene(sceneId, format ?? "mp4", (event) => {
+      res.write(`data: ${JSON.stringify(event)}\n\n`);
+    });
+    res.write(`data: ${JSON.stringify({ type: "url", url: result.url, durationSeconds: result.durationSeconds })}\n\n`);
+    res.write("event: done\ndata: {}\n\n");
+    res.end();
+  } catch (err) {
+    res.write(
+      `data: ${JSON.stringify({ type: "error", message: err instanceof Error ? err.message : String(err) })}\n\n`,
+    );
+    res.end();
+  }
 });
 
 // ─── Start ───────────────────────────────────────────────────────────────────
