@@ -9,7 +9,7 @@ you take manual control of any element. Final export renders remotely
 
 ```
                      ┌─────────────────────┐
-  你 prompt  ───────▶│   Agent loop         │  Ollama (qwen2.5-coder etc.)
+   prompt  ───────▶│   Agent loop         │  Ollama (qwen2.5-coder etc.)
                      │   (src/agent/*)      │  think → call tools → observe
                      └──────────┬───────────┘
                                 │ tool calls mutate
