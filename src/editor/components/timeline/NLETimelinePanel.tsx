@@ -1,7 +1,12 @@
 import type { PlayerRef } from "@remotion/player";
 import React, { useState, useRef, useEffect, useMemo } from "react";
 import type { Composition, SceneElement, Scene } from "../../../schema/scene";
-import { totalDurationInFrames } from "../../../schema/scene";
+import {
+  collectCompositionTimingIssues,
+  getSceneStartFrame,
+  getSceneStartFrames,
+  totalDurationInFrames,
+} from "../../../schema/scene";
 import { TimeRuler, formatTimecode } from "./TimeRuler";
 import { TrackHeader, type TrackConfig } from "./TrackHeader";
 import { ClipBlock, type TimelineClipData } from "./ClipBlock";
@@ -65,10 +70,15 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
   const [activeTool, setActiveTool] = useState<"select" | "razor">("select");
   const [selectedClipIds, setSelectedClipIds] = useState<string[]>([]);
   const [trackStates, setTrackStates] = useState<Record<string, Partial<TrackConfig>>>({});
+  const [showDiagnostics, setShowDiagnostics] = useState(false);
 
   const trackHeight = 44;
   const totalFrames = Math.max(150, totalDurationInFrames(composition));
   const timelineContentRef = useRef<HTMLDivElement>(null);
+  const diagnostics = useMemo(
+    () => collectCompositionTimingIssues(composition),
+    [composition],
+  );
 
   // Sync state & events with Remotion Player
   useEffect(() => {
@@ -130,9 +140,10 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
   // Map Composition Scenes & Elements onto Timeline Clips across tracks
   const clips: TimelineClipData[] = useMemo(() => {
     const list: TimelineClipData[] = [];
-    let currentSceneStart = 0;
+    const sceneStarts = getSceneStartFrames(composition);
 
-    composition.scenes.forEach((scene) => {
+    composition.scenes.forEach((scene, sceneIndex) => {
+      const currentSceneStart = sceneStarts[sceneIndex] ?? 0;
       // Add main scene block on Track V1 or based on layout
       list.push({
         id: scene.id,
@@ -175,7 +186,6 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
         });
       });
 
-      currentSceneStart += scene.durationInFrames;
     });
 
     // Add Global Audio elements to A2 track
@@ -277,7 +287,8 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
     if (selectedElementId) {
       const selectedClip = clips.find((c) => c.elementId === selectedElementId);
       if (selectedClip && selectedClip.elementId) {
-        onSplitElement(selectedClip.elementId, Math.round(currentFrame));
+        const sceneStart = getSceneStartFrame(composition, selectedClip.sceneId);
+        onSplitElement(selectedClip.elementId, Math.round(currentFrame - sceneStart));
         return;
       }
     }
@@ -289,7 +300,8 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
         currentFrame <= c.startFrame + c.durationInFrames,
     );
     if (clipAtPlayhead?.elementId) {
-      onSplitElement(clipAtPlayhead.elementId, Math.round(currentFrame));
+      const sceneStart = getSceneStartFrame(composition, clipAtPlayhead.sceneId);
+      onSplitElement(clipAtPlayhead.elementId, Math.round(currentFrame - sceneStart));
     }
   };
 
@@ -304,8 +316,9 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
         const rect = targetElement.getBoundingClientRect();
         const clickXOnClip = e.clientX - rect.left;
         const frameOffset = Math.round(clickXOnClip / zoomScale);
-        const splitFrame = Math.max(clip.startFrame + 1, clip.startFrame + frameOffset);
-        onSplitElement(clip.elementId, splitFrame);
+        const splitFrameGlobal = Math.max(clip.startFrame + 1, clip.startFrame + frameOffset);
+        const sceneStart = getSceneStartFrame(composition, clip.sceneId);
+        onSplitElement(clip.elementId, splitFrameGlobal - sceneStart);
       }
       return;
     }
@@ -333,9 +346,12 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
     if (!clip) return;
 
     if (clip.elementId && onPatchElement) {
-      const endFrame = clip.startFrame + clip.durationInFrames;
-      const newStart = Math.max(0, Math.min(endFrame - 5, targetStartFrame));
-      const newDur = endFrame - newStart;
+      const sceneStart = getSceneStartFrame(composition, clip.sceneId);
+      const localStart = clip.startFrame - sceneStart;
+      const localEnd = localStart + clip.durationInFrames;
+      const targetLocalStart = targetStartFrame - sceneStart;
+      const newStart = Math.max(0, Math.min(localEnd - 5, targetLocalStart));
+      const newDur = localEnd - newStart;
       onPatchElement(clip.elementId, { startFrame: newStart, durationInFrames: newDur });
     }
   };
@@ -373,7 +389,10 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
     }
 
     if (clip.elementId && onPatchElement) {
-      onPatchElement(clip.elementId, { startFrame: targetFrames });
+      const sceneStart = getSceneStartFrame(composition, clip.sceneId);
+      onPatchElement(clip.elementId, {
+        startFrame: Math.max(0, targetFrames - sceneStart),
+      });
     }
   };
 
@@ -482,6 +501,13 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
             <span className="tc-label">TIME</span>
             <span className="tc-value">{formatTimecode(currentFrame, composition.fps)}</span>
           </div>
+          <button
+            className={`tool-btn diagnostics-btn ${diagnostics.length > 0 ? "has-issues" : "clean"}`}
+            title="Scan timing and layer issues"
+            onClick={() => setShowDiagnostics((visible) => !visible)}
+          >
+            {diagnostics.length > 0 ? `⚠ ${diagnostics.length} issues` : "✓ Timeline OK"}
+          </button>
         </div>
 
         <div className="toolbar-right">
@@ -540,6 +566,50 @@ export const NLETimelinePanel: React.FC<NLETimelinePanelProps> = ({
           )}
         </div>
       </div>
+
+      {showDiagnostics && (
+        <div className="timeline-diagnostics" role="status">
+          <div className="timeline-diagnostics-header">
+            <div>
+              <strong>Timeline health</strong>
+              <span>
+                {diagnostics.length === 0
+                  ? " No timing or obvious layer conflicts found."
+                  : ` ${diagnostics.filter((issue) => issue.severity === "error").length} errors · ${
+                      diagnostics.filter((issue) => issue.severity === "warning").length
+                    } warnings`}
+              </span>
+            </div>
+            <button className="icon-btn sm" onClick={() => setShowDiagnostics(false)} title="Close diagnostics">
+              ×
+            </button>
+          </div>
+          {diagnostics.length > 0 && (
+            <div className="timeline-diagnostics-list">
+              {diagnostics.slice(0, 8).map((issue, index) => (
+                <button
+                  key={`${issue.code}-${issue.sceneId}-${issue.elementId}-${index}`}
+                  className={`timeline-diagnostic-row ${issue.severity}`}
+                  onClick={() => {
+                    if (issue.sceneId) onSelectScene(issue.sceneId);
+                    if (issue.elementId) onSelectElement(issue.elementId);
+                  }}
+                >
+                  <span className="diagnostic-severity">{issue.severity === "error" ? "!" : "·"}</span>
+                  <span className="diagnostic-message">{issue.message}</span>
+                  {issue.sceneId && <span className="diagnostic-jump">Focus</span>}
+                </button>
+              ))}
+              {diagnostics.length > 8 && (
+                <div className="timeline-diagnostics-more">
+                  Showing 8 of {diagnostics.length} findings. Use the agent tool
+                  <code> diagnose_composition</code> for the full report.
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Main NLE Body: Headers on Left + Track Canvas on Right */}
       <div className="nle-timeline-body">

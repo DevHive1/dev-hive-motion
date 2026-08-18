@@ -337,12 +337,214 @@ export type SceneElement = z.infer<typeof SceneElementSchema>;
 export type Scene = z.infer<typeof SceneSchema>;
 export type Composition = z.infer<typeof CompositionSchema>;
 
+/**
+ * The renderer uses transition overlaps when laying scenes out in global
+ * composition time. Keep this calculation in the schema module so the
+ * renderer, timeline, diagnostics and agent all agree on the same clock.
+ */
+export function getSceneStartFrames(composition: Composition): number[] {
+  const starts: number[] = [];
+  let cursor = 0;
+
+  composition.scenes.forEach((scene, index) => {
+    const incomingOverlap =
+      index > 0 && scene.transitionIn?.type !== "none"
+        ? scene.transitionIn?.durationInFrames ?? 0
+        : 0;
+    const start = Math.max(0, cursor - incomingOverlap);
+    starts.push(start);
+    cursor = start + scene.durationInFrames;
+  });
+
+  return starts;
+}
+
+export function getSceneStartFrame(composition: Composition, sceneId: string): number {
+  const index = composition.scenes.findIndex((scene) => scene.id === sceneId);
+  if (index < 0) return 0;
+  return getSceneStartFrames(composition)[index] ?? 0;
+}
+
+export type CompositionTimingIssue = {
+  code:
+    | "empty-composition"
+    | "empty-scene"
+    | "transition-too-long"
+    | "element-overflow"
+    | "animation-overflow"
+    | "element-before-scene"
+    | "scene-too-short"
+    | "duplicate-element-id"
+    | "layer-overlap";
+  severity: "error" | "warning";
+  sceneId?: string;
+  elementId?: string;
+  message: string;
+  suggestedFix?: string;
+};
+
+/**
+ * Deterministic project-wide timing validation. This deliberately reports
+ * intentional short clips as warnings, while impossible ranges and clipped
+ * animations are errors. It is used by both the UI diagnostics and the agent.
+ */
+export function collectCompositionTimingIssues(
+  composition: Composition,
+): CompositionTimingIssue[] {
+  const issues: CompositionTimingIssue[] = [];
+
+  if (composition.scenes.length === 0) {
+    issues.push({
+      code: "empty-composition",
+      severity: "warning",
+      message: "The composition has no scenes.",
+      suggestedFix: "Add at least one scene before rendering.",
+    });
+    return issues;
+  }
+
+  const seenElementIds = new Set<string>();
+  composition.scenes.forEach((scene) => {
+    if (scene.durationInFrames < composition.fps) {
+      issues.push({
+        code: "scene-too-short",
+        severity: "warning",
+        sceneId: scene.id,
+        message: `Scene "${scene.name}" is only ${scene.durationInFrames} frames long.`,
+        suggestedFix: "Extend the scene to at least one second unless the flash is intentional.",
+      });
+    }
+    if (scene.elements.length === 0) {
+      issues.push({
+        code: "empty-scene",
+        severity: "warning",
+        sceneId: scene.id,
+        message: `Scene "${scene.name}" has no visual elements.`,
+        suggestedFix: "Add a background or visual element, or remove the scene.",
+      });
+    }
+    if (
+      scene.transitionIn &&
+      scene.transitionIn.type !== "none" &&
+      scene.transitionIn.durationInFrames >= scene.durationInFrames
+    ) {
+      issues.push({
+        code: "transition-too-long",
+        severity: "error",
+        sceneId: scene.id,
+        message: `Scene "${scene.name}" transition (${scene.transitionIn.durationInFrames}f) is as long as the scene (${scene.durationInFrames}f).`,
+        suggestedFix: "Shorten the transition or extend the scene.",
+      });
+    }
+
+    scene.elements.forEach((element) => {
+      if (seenElementIds.has(element.id)) {
+        issues.push({
+          code: "duplicate-element-id",
+          severity: "error",
+          sceneId: scene.id,
+          elementId: element.id,
+          message: `Element id "${element.id}" is duplicated across the composition.`,
+          suggestedFix: "Give each element a unique id so selection and edits are unambiguous.",
+        });
+      }
+      seenElementIds.add(element.id);
+
+      if (element.startFrame < 0) {
+        issues.push({
+          code: "element-before-scene",
+          severity: "error",
+          sceneId: scene.id,
+          elementId: element.id,
+          message: `"${element.name}" starts before frame 0.`,
+          suggestedFix: "Set startFrame to 0 or a positive local frame.",
+        });
+      }
+
+      const elementEnd = element.startFrame + element.durationInFrames;
+      if (elementEnd > scene.durationInFrames) {
+        issues.push({
+          code: "element-overflow",
+          severity: "error",
+          sceneId: scene.id,
+          elementId: element.id,
+          message: `"${element.name}" ends at frame ${elementEnd}, past scene end ${scene.durationInFrames}.`,
+          suggestedFix: "Extend the scene or shorten/retime the element.",
+        });
+      }
+
+      element.animations.forEach((animation) => {
+        const animationEnd = animation.startFrame + animation.durationInFrames;
+        if (animationEnd > element.durationInFrames) {
+          issues.push({
+            code: "animation-overflow",
+            severity: "error",
+            sceneId: scene.id,
+            elementId: element.id,
+            message: `Animation "${animation.property}" on "${element.name}" ends at element frame ${animationEnd}, past its ${element.durationInFrames}f clip.`,
+            suggestedFix: "Retiming the animation or extending the element duration will prevent the tail from being clipped.",
+          });
+        }
+      });
+    });
+
+    for (let i = 0; i < scene.elements.length; i++) {
+      for (let j = i + 1; j < scene.elements.length; j++) {
+        const a = scene.elements[i];
+        const b = scene.elements[j];
+        const timeOverlaps =
+          a.startFrame < b.startFrame + b.durationInFrames &&
+          b.startFrame < a.startFrame + a.durationInFrames;
+        if (!timeOverlaps) continue;
+
+        const overlapWidth = Math.max(
+          0,
+          Math.min(a.x + a.width, b.x + b.width) - Math.max(a.x, b.x),
+        );
+        const overlapHeight = Math.max(
+          0,
+          Math.min(a.y + a.height, b.y + b.height) - Math.max(a.y, b.y),
+        );
+        if (overlapWidth === 0 || overlapHeight === 0) continue;
+
+        const [lower, higher] = a.zIndex <= b.zIndex ? [a, b] : [b, a];
+        const higherCanHideText =
+          higher.type !== "text" && lower.type === "text";
+        const sameBounds =
+          Math.abs(a.x - b.x) < 0.5 &&
+          Math.abs(a.y - b.y) < 0.5 &&
+          Math.abs(a.width - b.width) < 0.5 &&
+          Math.abs(a.height - b.height) < 0.5;
+
+        if (higherCanHideText || (sameBounds && a.zIndex === b.zIndex)) {
+          issues.push({
+            code: "layer-overlap",
+            severity: higherCanHideText ? "error" : "warning",
+            sceneId: scene.id,
+            elementId: higher.id,
+            message: higherCanHideText
+              ? `"${higher.name}" overlaps the text "${lower.name}" and is stacked above it.`
+              : `"${a.name}" and "${b.name}" occupy the same bounds at the same layer.`,
+            suggestedFix: higherCanHideText
+              ? `Raise "${lower.name}" above "${higher.name}" or move the elements apart.`
+              : "Move one element, resize it, or assign a deliberate layer order.",
+          });
+        }
+      }
+    }
+  });
+
+  return issues;
+}
+
 export function totalDurationInFrames(composition: Composition): number {
-  const sceneSum = composition.scenes.reduce((sum, scene) => sum + scene.durationInFrames, 0);
-  const overlap = composition.scenes
-    .slice(1)
-    .reduce((sum, scene) => sum + (scene.transitionIn?.durationInFrames ?? 0), 0);
-  return Math.max(1, sceneSum - overlap);
+  if (composition.scenes.length === 0) return 1;
+  const starts = getSceneStartFrames(composition);
+  const lastIndex = composition.scenes.length - 1;
+  return Math.max(
+    1,
+    (starts[lastIndex] ?? 0) + composition.scenes[lastIndex].durationInFrames,
+  );
 }
 
 export function getPresetDimensions(preset: z.infer<typeof OrientationPreset>): { width: number; height: number } {

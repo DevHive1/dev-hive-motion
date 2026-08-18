@@ -1,5 +1,10 @@
 import { sceneStore } from "../../../server/sceneStore";
-import type { Composition } from "../../../schema/scene";
+import {
+  getSceneStartFrames,
+  collectCompositionTimingIssues,
+  totalDurationInFrames,
+  type Composition,
+} from "../../../schema/scene";
 
 /**
  * timeline_overview — error.txt item 8.
@@ -17,6 +22,20 @@ export const timelineOverviewDef = {
     name: "timeline_overview",
     description:
       "Get a high-level summary of the whole composition: total duration in frames and seconds, each scene's start frame / end frame / duration / element count, the transition type at every scene boundary, and any pacing/visibility flags worth fixing. Call this AFTER building your last scene but BEFORE doing a full render - it's the 'take a breath and check the rhythm' step. Complements review_scene (which is per-scene detail) by giving you the whole project at once.",
+    parameters: {
+      type: "object",
+      properties: {},
+      required: [],
+    },
+  },
+};
+
+export const diagnoseCompositionDef = {
+  type: "function",
+  function: {
+    name: "diagnose_composition",
+    description:
+      "Run a project-wide timing and layer sanity check. Returns exact scene ranges, element/animation overflows, transitions that are too long, duplicate ids, and visible layer overlaps. Call this before and after major scene-building or timeline edits; fix errors before declaring the video ready.",
     parameters: {
       type: "object",
       properties: {},
@@ -53,18 +72,19 @@ export type TimelineOverviewResult = {
     durationInFrames?: number;
   }>;
   pacingNotes: string[];
+  timingIssues: ReturnType<typeof collectCompositionTimingIssues>;
 };
 
 export async function timelineOverviewImpl(_args: Record<string, unknown> = {}): Promise<TimelineOverviewResult> {
   const composition: Composition = sceneStore.get();
 
-  let cursor = 0;
+  const starts = getSceneStartFrames(composition);
   const scenes: TimelineOverviewResult["scenes"] = [];
   const transitions: TimelineOverviewResult["transitions"] = [];
 
   composition.scenes.forEach((scene, i) => {
-    const startFrame = cursor;
-    const endFrame = cursor + scene.durationInFrames;
+    const startFrame = starts[i] ?? 0;
+    const endFrame = startFrame + scene.durationInFrames;
     const visualElements = scene.elements.filter(
       (el) => el.type !== "audio",
     );
@@ -97,18 +117,10 @@ export async function timelineOverviewImpl(_args: Record<string, unknown> = {}):
       });
     }
 
-    // Advance cursor by the scene's full duration; the overlap is accounted
-    // for in the total below.
-    cursor = endFrame;
   });
 
-  // Total project length = sum of scene durations minus transition overlaps
-  // (same formula as schema.totalDurationInFrames).
-  const sceneSum = composition.scenes.reduce((s, sc) => s + sc.durationInFrames, 0);
-  const overlap = composition.scenes
-    .slice(1)
-    .reduce((s, sc) => s + (sc.transitionIn?.durationInFrames ?? 0), 0);
-  const totalFrames = Math.max(1, sceneSum - overlap);
+  const totalFrames = totalDurationInFrames(composition);
+  const timingIssues = collectCompositionTimingIssues(composition);
 
   const pacingNotes: string[] = [];
 
@@ -161,6 +173,13 @@ export async function timelineOverviewImpl(_args: Record<string, unknown> = {}):
     );
   }
 
+  if (timingIssues.length > 0) {
+    pacingNotes.push(
+      `${timingIssues.length} timing issue(s) detected. ` +
+        `Run diagnose_composition to see exact scene/element frames and fixes.`,
+    );
+  }
+
   return {
     totalFrames,
     totalSeconds: Number((totalFrames / composition.fps).toFixed(2)),
@@ -170,5 +189,31 @@ export async function timelineOverviewImpl(_args: Record<string, unknown> = {}):
     scenes,
     transitions,
     pacingNotes,
+    timingIssues,
+  };
+}
+
+export async function diagnoseCompositionImpl(): Promise<{
+  totalFrames: number;
+  totalSeconds: number;
+  sceneRanges: Array<{
+    sceneId: string;
+    name: string;
+    startFrame: number;
+    endFrame: number;
+  }>;
+  issues: ReturnType<typeof collectCompositionTimingIssues>;
+}> {
+  const overview = await timelineOverviewImpl();
+  return {
+    totalFrames: overview.totalFrames,
+    totalSeconds: overview.totalSeconds,
+    sceneRanges: overview.scenes.map((scene) => ({
+      sceneId: scene.id,
+      name: scene.name,
+      startFrame: scene.startFrame,
+      endFrame: scene.endFrame,
+    })),
+    issues: overview.timingIssues,
   };
 }

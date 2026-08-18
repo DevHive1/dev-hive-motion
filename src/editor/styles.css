@@ -2439,6 +2439,102 @@ button {
   letter-spacing: 0.05em;
 }
 
+.diagnostics-btn {
+  border: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.diagnostics-btn.has-issues {
+  color: #fbbf24;
+  background: rgba(180, 83, 9, 0.16);
+}
+
+.diagnostics-btn.clean {
+  color: #86efac;
+  background: rgba(22, 101, 52, 0.16);
+}
+
+.timeline-diagnostics {
+  padding: 8px 12px;
+  background: var(--panel);
+  border-bottom: 1px solid var(--border);
+}
+
+.timeline-diagnostics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--text);
+  font-size: 11px;
+}
+
+.timeline-diagnostics-header span {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.timeline-diagnostics-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-top: 7px;
+}
+
+.timeline-diagnostic-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 6px 8px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: var(--panel-raised);
+  color: var(--text-muted);
+  text-align: left;
+  cursor: pointer;
+  font-size: 10px;
+}
+
+.timeline-diagnostic-row:hover {
+  border-color: var(--border-hover);
+  color: var(--text);
+}
+
+.timeline-diagnostic-row.error .diagnostic-severity {
+  color: #fb7185;
+}
+
+.timeline-diagnostic-row.warning .diagnostic-severity {
+  color: #fbbf24;
+}
+
+.diagnostic-severity {
+  width: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.diagnostic-message {
+  flex: 1;
+}
+
+.diagnostic-jump {
+  color: var(--accent-primary, #d97706);
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.timeline-diagnostics-more {
+  padding: 5px 8px 1px;
+  color: var(--text-muted);
+  font-size: 10px;
+}
+
+.timeline-diagnostics-more code {
+  color: var(--accent-primary, #d97706);
+}
+
 .zoom-controls {
   display: flex;
   align-items: center;

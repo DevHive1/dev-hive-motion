@@ -38,7 +38,12 @@ import { addInOutAnimationImpl, addInOutAnimationDef, addEntranceAnimationImpl, 
 import { editByMentionDef, editByMentionImpl } from "./tools/element/mention";
 import { duplicateElementDef, duplicateElementImpl } from "./tools/element/duplicate";
 import { nudgeElementDef, nudgeElementImpl } from "./tools/element/nudge";
-import { timelineOverviewDef, timelineOverviewImpl } from "./tools/scene/timeline";
+import {
+  timelineOverviewDef,
+  timelineOverviewImpl,
+  diagnoseCompositionDef,
+  diagnoseCompositionImpl,
+} from "./tools/scene/timeline";
 import { fitTextToBoxDef, fitTextToBoxImpl } from "./tools/element/fitText";
 import { previewSingleSceneDef, previewSingleSceneImpl } from "./tools/scene/preview";
 import { setAnimationTimingDef, setAnimationTimingImpl } from "./tools/animation/timing";
@@ -949,6 +954,7 @@ export const toolDefinitions = [
   duplicateElementDef,
   nudgeElementDef,
   timelineOverviewDef,
+  diagnoseCompositionDef,
   fitTextToBoxDef,
   previewSingleSceneDef,
   diagnoseSceneDef,
@@ -1969,6 +1975,9 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
   },
   async timeline_overview(args: any = {}) {
     return timelineOverviewImpl(args);
+  },
+  async diagnose_composition(args: any = {}) {
+    return diagnoseCompositionImpl(args);
   },
   async fit_text_to_box(args: any) {
     return fitTextToBoxImpl(args);
