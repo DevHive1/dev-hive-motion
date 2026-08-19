@@ -92,6 +92,15 @@ export const addBorderImpl = async (rawArgs: any) => {
   const width = args.width ?? 100 - inset * 2;
   const height = args.height ?? 100 - inset * 2;
 
+  // Compute next zIndex from current scene state
+  let nextZ: number;
+  await sceneStore.update((draft) => {
+    const scene = draft.scenes.find((s) => s.id === args.sceneId);
+    if (!scene) throw new Error(`add_border: scene "${args.sceneId}" not found.`);
+    nextZ = scene.elements.length ? Math.max(...scene.elements.map(e => e.zIndex)) + 1 : 0;
+    return draft;
+  });
+
   // If an inner border is requested, we add a SECOND element. The agent
   // gets two elementIds back so it can animate them together or apart.
   const ids: string[] = [];
@@ -108,7 +117,7 @@ export const addBorderImpl = async (rawArgs: any) => {
     height,
     rotation: 0,
     opacity: 1,
-    zIndex: args.zIndex ?? 0,
+    zIndex: args.zIndex !== undefined ? args.zIndex : nextZ,
     startFrame: args.startFrame ?? 0,
     durationInFrames: args.durationInFrames ?? 150,
     animations: [],
@@ -141,7 +150,7 @@ export const addBorderImpl = async (rawArgs: any) => {
         height: height - innerInset * 2,
         rotation: 0,
         opacity: 1,
-        zIndex: args.zIndex ?? 0,
+        zIndex: args.zIndex !== undefined ? args.zIndex + 1 : nextZ + 1,
         startFrame: args.startFrame ?? 0,
         durationInFrames: args.durationInFrames ?? 150,
         animations: [],

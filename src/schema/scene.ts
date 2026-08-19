@@ -515,19 +515,24 @@ export function collectCompositionTimingIssues(
           Math.abs(a.y - b.y) < 0.5 &&
           Math.abs(a.width - b.width) < 0.5 &&
           Math.abs(a.height - b.height) < 0.5;
+        const bothText = a.type === "text" && b.type === "text";
 
-        if (higherCanHideText || (sameBounds && a.zIndex === b.zIndex)) {
+        if (higherCanHideText || (sameBounds && a.zIndex === b.zIndex) || (bothText && overlapWidth > 0 && overlapHeight > 0 && a.zIndex !== b.zIndex)) {
           issues.push({
             code: "layer-overlap",
-            severity: higherCanHideText ? "error" : "warning",
+            severity: higherCanHideText ? "error" : bothText ? "warning" : "warning",
             sceneId: scene.id,
             elementId: higher.id,
             message: higherCanHideText
               ? `"${higher.name}" overlaps the text "${lower.name}" and is stacked above it.`
-              : `"${a.name}" and "${b.name}" occupy the same bounds at the same layer.`,
+              : bothText
+                ? `"${a.name}" and "${b.name}" are both text elements that overlap and may be unreadable together.`
+                : `"${a.name}" and "${b.name}" occupy the same bounds at the same layer.`,
             suggestedFix: higherCanHideText
               ? `Raise "${lower.name}" above "${higher.name}" or move the elements apart.`
-              : "Move one element, resize it, or assign a deliberate layer order.",
+              : bothText
+                ? "Move one text element, resize it, or adjust layer order."
+                : "Move one element, resize it, or assign a deliberate layer order.",
           });
         }
       }

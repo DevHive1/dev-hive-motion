@@ -142,6 +142,15 @@ export const addLineImpl = async (rawArgs: any) => {
     });
   }
 
+  // Compute next zIndex from current scene state
+  let nextZ: number;
+  await sceneStore.update((draft) => {
+    const scene = draft.scenes.find((s) => s.id === args.sceneId);
+    if (!scene) throw new Error(`add_line: scene "${args.sceneId}" not found.`);
+    nextZ = scene.elements.length ? Math.max(...scene.elements.map(e => e.zIndex)) + 1 : 0;
+    return draft;
+  });
+
   const element: ShapeElement = {
     id: `el-${nanoid(6)}`,
     type: "shape",
@@ -154,7 +163,7 @@ export const addLineImpl = async (rawArgs: any) => {
     height: orientation === "horizontal" ? thicknessPct : lengthPct,
     rotation: 0,
     opacity: 1,
-    zIndex: args.zIndex ?? 1,
+    zIndex: args.zIndex !== undefined ? args.zIndex : nextZ,
     startFrame: args.startFrame ?? 0,
     durationInFrames: args.durationInFrames ?? 150,
     animations: [],

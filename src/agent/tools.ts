@@ -155,6 +155,7 @@ export const toolDefinitions = [
           gradient: { type: "object", description: "Gradient text fill (overrides color). {angle:135, stops:[{color:'#f00',offset:0},{color:'#00f',offset:1}]}" },
           startFrame: { type: "number" },
           durationInFrames: { type: "number" },
+          zIndex: { type: "number", description: "Stacking order. Higher is more in front. Omit to stack on top of everything already in the scene." },
         },
         required: ["sceneId", "text"],
       },
@@ -182,6 +183,7 @@ export const toolDefinitions = [
           },
           startFrame: { type: "number" },
           durationInFrames: { type: "number" },
+          zIndex: { type: "number", description: "Stacking order. Higher is more in front. Omit to stack on top of everything already in the scene." },
         },
         required: ["sceneId", "src"],
       },
@@ -205,6 +207,7 @@ export const toolDefinitions = [
           muted: { type: "boolean" },
           startFrame: { type: "number" },
           durationInFrames: { type: "number" },
+          zIndex: { type: "number", description: "Stacking order. Higher is more in front. Omit to stack on top of everything already in the scene." },
         },
         required: ["sceneId", "src"],
       },
@@ -253,6 +256,7 @@ export const toolDefinitions = [
           },
           startFrame: { type: "number" },
           durationInFrames: { type: "number" },
+          zIndex: { type: "number", description: "Stacking order. Higher is more in front. Omit to stack on top of everything already in the scene." },
         },
         required: ["sceneId", "shape"],
       },
@@ -1127,7 +1131,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       textAlign: args.textAlign ?? "center",
       rotation: 0,
       opacity: 1,
-      zIndex: 1,
+      zIndex: args.zIndex,
       startFrame: args.startFrame ?? 0,
       durationInFrames: args.durationInFrames ?? 90,
       letterSpacing: args.letterSpacing ?? 0,
@@ -1174,7 +1178,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       boxShadow: args.boxShadow,
       rotation: 0,
       opacity: 1,
-      zIndex: 1,
+      zIndex: args.zIndex,
       startFrame: args.startFrame ?? 0,
       durationInFrames: args.durationInFrames ?? 90,
       animations: [],
@@ -1205,7 +1209,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       playbackRate: 1,
       rotation: 0,
       opacity: 1,
-      zIndex: 0,
+      zIndex: args.zIndex,
       startFrame: args.startFrame ?? 0,
       durationInFrames: args.durationInFrames ?? 150,
       animations: [],
@@ -1235,7 +1239,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       height: args.height ?? 30,
       rotation: 0,
       opacity: 1,
-      zIndex: 0,
+      zIndex: args.zIndex,
       startFrame: args.startFrame ?? 0,
       durationInFrames: args.durationInFrames ?? 90,
       animations: [],
@@ -1261,7 +1265,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       height: args.height ?? 80,
       rotation: 0,
       opacity: 1,
-      zIndex: 0,
+      zIndex: args.zIndex,
       startFrame: args.startFrame ?? 0,
       durationInFrames: args.durationInFrames ?? 90,
       animations: [],
@@ -1766,6 +1770,14 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
 
       const zIndexes = scene.elements.map((e) => e.zIndex);
       target.zIndex = args.position === "front" ? Math.max(...zIndexes) + 1 : Math.min(...zIndexes) - 1;
+      
+      // Normalize all zIndex values to consecutive integers 0..N-1
+      // Sort elements by their current zIndex (stable sort)
+      const sorted = [...scene.elements].sort((a, b) => (a.zIndex ?? 0) - (b.zIndex ?? 0));
+      sorted.forEach((element, index) => {
+        element.zIndex = index;
+      });
+      
       return draft;
     });
     return { ok: true };
@@ -1819,7 +1831,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       height: 0,
       rotation: 0,
       opacity: 1,
-      zIndex: 0,
+      zIndex: args.zIndex,
       startFrame: args.startFrame ?? 0,
       durationInFrames: args.durationInFrames ?? 150,
       animations: [],
@@ -2031,6 +2043,12 @@ async function addElementToScene(
 ) {
   await sceneStore.update((draft) => {
     const scene = findScene(draft.scenes, sceneId);
+    // Compute next zIndex: on top of everything currently in the scene
+    const nextZ = scene.elements.length ? Math.max(...scene.elements.map(e => e.zIndex)) + 1 : 0;
+    // Use explicit zIndex if provided, otherwise default to on-top
+    if (element.zIndex === undefined) {
+      element.zIndex = nextZ;
+    }
     scene.elements.push(element);
     return draft;
   });
