@@ -92,10 +92,11 @@ export const addBorderImpl = async (rawArgs: any) => {
   const width = args.width ?? 100 - inset * 2;
   const height = args.height ?? 100 - inset * 2;
 
-  // Compute next zIndex from current scene state
+  // Get scene to compute zIndex and duration
   let nextZ: number;
+  let scene: any;
   await sceneStore.update((draft) => {
-    const scene = draft.scenes.find((s) => s.id === args.sceneId);
+    scene = draft.scenes.find((s) => s.id === args.sceneId);
     if (!scene) throw new Error(`add_border: scene "${args.sceneId}" not found.`);
     nextZ = scene.elements.length ? Math.max(...scene.elements.map(e => e.zIndex)) + 1 : 0;
     return draft;
@@ -119,7 +120,7 @@ export const addBorderImpl = async (rawArgs: any) => {
     opacity: 1,
     zIndex: args.zIndex !== undefined ? args.zIndex : nextZ,
     startFrame: args.startFrame ?? 0,
-    durationInFrames: args.durationInFrames ?? 150,
+    durationInFrames: args.durationInFrames ?? Math.max(1, scene.durationInFrames - (args.startFrame ?? 0)),
     animations: [],
     locked: false,
     hidden: false,
@@ -152,7 +153,7 @@ export const addBorderImpl = async (rawArgs: any) => {
         opacity: 1,
         zIndex: args.zIndex !== undefined ? args.zIndex + 1 : nextZ + 1,
         startFrame: args.startFrame ?? 0,
-        durationInFrames: args.durationInFrames ?? 150,
+        durationInFrames: args.durationInFrames ?? Math.max(1, scene.durationInFrames - (args.startFrame ?? 0)),
         animations: [],
         locked: false,
         hidden: false,

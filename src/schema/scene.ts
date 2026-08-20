@@ -486,6 +486,37 @@ export function collectCompositionTimingIssues(
           });
         }
       });
+
+      // Check if element ends early (disappears before scene ends)
+      const elementEnd = element.startFrame + element.durationInFrames;
+      if (elementEnd < scene.durationInFrames - 1) {
+        // Check if there's an animation that moves the element out
+        const hasExitAnimation = element.animations.some((anim) => {
+          const animEnd = anim.startFrame + anim.durationInFrames;
+          // Animation that ends at or before element end and moves element out
+          if (animEnd <= elementEnd) {
+            // Check for opacity fade-out to 0
+            if (anim.property === "opacity" && anim.to === 0) return true;
+            // Check for off-canvas translate
+            if (anim.property === "x" || anim.property === "y") {
+              // If animating to a position that's off-canvas
+              if (anim.to < -10 || anim.to > 110) return true;
+            }
+          }
+          return false;
+        });
+
+        if (!hasExitAnimation) {
+          issues.push({
+            code: "element-ends-early",
+            severity: "warning",
+            sceneId: scene.id,
+            elementId: element.id,
+            message: `"${element.name}" ends at frame ${elementEnd}, before scene end ${scene.durationInFrames}.`,
+            suggestedFix: "Extend the element's durationInFrames to fill the scene, or add an exit animation.",
+          });
+        }
+      }
     });
 
     for (let i = 0; i < scene.elements.length; i++) {

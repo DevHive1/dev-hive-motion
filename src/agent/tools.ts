@@ -713,6 +713,108 @@ export const toolDefinitions = [
   {
     type: "function",
     function: {
+      name: "get_storyboard",
+      description: "Get the current storyboard for the project. Returns the full storyboard object (title, concept, narrativeArc, moodDirection, brief, scenes array) or {exists: false} if no storyboard has been created yet. Use this to read back the storyboard before refining it with update_storyboard.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "update_storyboard",
+      description: "Partially update an existing storyboard. Unlike create_storyboard (which overwrites the whole thing), this applies targeted changes: top-level fields (title, concept, narrativeArc, moodDirection), partial brief updates, and scene-level operations (update, insertAfter, remove, reorder). If no storyboard exists, throws an error telling you to call create_storyboard first.",
+      parameters: {
+        type: "object",
+        properties: {
+          title: { type: "string", description: "Replace the storyboard title." },
+          concept: { type: "string", description: "Replace the concept." },
+          narrativeArc: { type: "string", description: "Replace the narrative arc." },
+          moodDirection: { type: "string", description: "Replace the mood direction." },
+          brief: {
+            type: "object",
+            description: "Partial brief object - only provided keys are updated, others remain unchanged.",
+            properties: {
+              targetAudience: { type: "string" },
+              platform: { type: "string" },
+              aspectRatio: { type: "string", enum: ["16:9", "9:16", "1:1", "4:3", "21:9"] },
+              targetDurationSeconds: { type: "number" },
+              genre: { type: "string", enum: ["corporate", "social-reel", "documentary", "cinematic", "kids", "product-launch", "educational", "other"] },
+              designLanguage: {
+                type: "object",
+                properties: {
+                  palette: { type: "array", items: { type: "string" } },
+                  typePair: { type: "object", properties: { display: { type: "string" }, body: { type: "string" } } },
+                  margin: { type: "number" },
+                  typeScale: { type: "object", properties: { display: { type: "number" }, body: { type: "number" }, kicker: { type: "number" } } },
+                  motionVocabulary: { type: "array", items: { type: "string" } },
+                },
+              },
+            },
+          },
+          sceneOps: {
+            type: "array",
+            description: "Array of operations to apply to the scenes array in order.",
+            items: {
+              type: "object",
+              properties: {
+                action: { type: "string", enum: ["update", "insertAfter", "remove", "reorder"] },
+                match: { type: "string", description: "Scene name to match for update/remove actions." },
+                after: { type: "string", description: "For insertAfter: insert after this scene name. Use null to insert at start." },
+                scene: {
+                  type: "object",
+                  description: "For insertAfter: the full scene object to insert. For update: partial scene patch to merge.",
+                  properties: {
+                    name: { type: "string" },
+                    purpose: { type: "string" },
+                    narrativeBeat: { type: "string" },
+                    contentNotes: { type: "string" },
+                    keyElements: { type: "string" },
+                    transitionNote: { type: "string" },
+                    animationNote: { type: "string" },
+                    shotType: { type: "string", enum: ["establishing", "wide", "medium", "closeUp", "detail"] },
+                    visualTreatment: { type: "string" },
+                    targetDurationInFrames: { type: "number" },
+                    entranceCue: { type: "string" },
+                    audioCue: {
+                      type: "object",
+                      properties: {
+                        kind: { type: "string", enum: ["voiceover", "music", "sfx", "silence"] },
+                        description: { type: "string" },
+                        startFrame: { type: "number" },
+                      },
+                    },
+                    dependencies: { type: "array", items: { type: "string" } },
+                  },
+                },
+                order: { type: "array", items: { type: "string" }, description: "For reorder: array of scene names in new order." },
+              },
+              required: ["action"],
+            },
+          },
+        },
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
+      name: "delete_storyboard",
+      description: "Delete the current storyboard from the project. Returns {ok: true}. If no storyboard exists, this is a no-op that still returns {ok: true}.",
+      parameters: {
+        type: "object",
+        properties: {},
+        required: [],
+      },
+    },
+  },
+  {
+    type: "function",
+    function: {
       name: "review_scene",
       description:
         "Get a structured, pre-analyzed report on a scene you just built - element bounding boxes sorted by layer, flagged overlaps (e.g. a shape stacked above text that may cover it), whether anything is visible at frame 0, and out-of-bounds elements. Call this after building each scene and actually reason about any flags returned - fix them with update_element/add_animation before moving to the next scene. Don't call this and ignore the output.",
@@ -1115,6 +1217,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
   },
 
   async add_text_element(args: any) {
+    const scene = findScene(sceneStore.get().scenes, args.sceneId);
     const element: TextElement = {
       id: `el-${nanoid(6)}`,
       type: "text",
@@ -1133,7 +1236,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       opacity: 1,
       zIndex: args.zIndex,
       startFrame: args.startFrame ?? 0,
-      durationInFrames: args.durationInFrames ?? 90,
+      durationInFrames: args.durationInFrames ?? Math.max(1, scene.durationInFrames - (args.startFrame ?? 0)),
       letterSpacing: args.letterSpacing ?? 0,
       textShadow: args.textShadow ?? false,
       highlightColor: args.highlightColor,
@@ -1164,6 +1267,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
           `If you generated the image with generate_ai_image, use the URL it returned (it is already a real URL).`,
       );
     }
+    const scene = findScene(sceneStore.get().scenes, args.sceneId);
     const element: ImageElement = {
       id: `el-${nanoid(6)}`,
       type: "image",
@@ -1180,7 +1284,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       opacity: 1,
       zIndex: args.zIndex,
       startFrame: args.startFrame ?? 0,
-      durationInFrames: args.durationInFrames ?? 90,
+      durationInFrames: args.durationInFrames ?? Math.max(1, scene.durationInFrames - (args.startFrame ?? 0)),
       animations: [],
       locked: false,
       hidden: false,
@@ -1194,6 +1298,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
   },
 
   async add_video_element(args: any) {
+    const scene = findScene(sceneStore.get().scenes, args.sceneId);
     const element: VideoElement = {
       id: `el-${nanoid(6)}`,
       type: "video",
@@ -1211,7 +1316,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       opacity: 1,
       zIndex: args.zIndex,
       startFrame: args.startFrame ?? 0,
-      durationInFrames: args.durationInFrames ?? 150,
+      durationInFrames: args.durationInFrames ?? Math.max(1, scene.durationInFrames - (args.startFrame ?? 0)),
       animations: [],
       locked: false,
       hidden: false,
@@ -1221,6 +1326,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
   },
 
   async add_shape_element(args: any) {
+    const scene = findScene(sceneStore.get().scenes, args.sceneId);
     const element: ShapeElement = {
       id: `el-${nanoid(6)}`,
       type: "shape",
@@ -1241,7 +1347,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       opacity: 1,
       zIndex: args.zIndex,
       startFrame: args.startFrame ?? 0,
-      durationInFrames: args.durationInFrames ?? 90,
+      durationInFrames: args.durationInFrames ?? Math.max(1, scene.durationInFrames - (args.startFrame ?? 0)),
       animations: [],
       locked: false,
       hidden: false,
@@ -1251,6 +1357,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
   },
 
   async add_custom_element(args: any) {
+    const scene = findScene(sceneStore.get().scenes, args.sceneId);
     const element: CustomElement = {
       id: `el-${nanoid(6)}`,
       type: "custom",
@@ -1267,7 +1374,7 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
       opacity: 1,
       zIndex: args.zIndex,
       startFrame: args.startFrame ?? 0,
-      durationInFrames: args.durationInFrames ?? 90,
+      durationInFrames: args.durationInFrames ?? Math.max(1, scene.durationInFrames - (args.startFrame ?? 0)),
       animations: [],
       locked: false,
       hidden: false,
@@ -1690,6 +1797,135 @@ export const toolImplementations: Record<string, (args: any) => Promise<unknown>
           draft.height = 1080;
         }
       }
+      return draft;
+    });
+    return { ok: true };
+  },
+
+  async get_storyboard() {
+    const composition = sceneStore.get();
+    if (!composition.storyboard) {
+      return { exists: false };
+    }
+    return composition.storyboard;
+  },
+
+  async update_storyboard(args: {
+    title?: string;
+    concept?: string;
+    narrativeArc?: string;
+    moodDirection?: string;
+    brief?: Record<string, unknown>;
+    sceneOps?: Array<{
+      action: "update" | "insertAfter" | "remove" | "reorder";
+      match?: string;
+      after?: string | null;
+      scene?: Record<string, unknown>;
+      order?: string[];
+    }>;
+  }) {
+    await sceneStore.update((draft) => {
+      if (!draft.storyboard) {
+        throw new Error(
+          "No storyboard exists. Call create_storyboard first to create one.",
+        );
+      }
+
+      // Update top-level fields
+      if (args.title !== undefined) draft.storyboard.title = args.title;
+      if (args.concept !== undefined) draft.storyboard.concept = args.concept;
+      if (args.narrativeArc !== undefined) draft.storyboard.narrativeArc = args.narrativeArc;
+      if (args.moodDirection !== undefined) draft.storyboard.moodDirection = args.moodDirection;
+
+      // Shallow merge brief
+      if (args.brief) {
+        draft.storyboard.brief = { ...draft.storyboard.brief, ...args.brief };
+      }
+
+      // Process scene operations
+      if (args.sceneOps) {
+        for (const op of args.sceneOps) {
+          switch (op.action) {
+            case "update": {
+              if (!op.match) {
+                throw new Error("update action requires a match parameter (scene name).");
+              }
+              const sceneIndex = draft.storyboard.scenes.findIndex((s) => s.name === op.match);
+              if (sceneIndex === -1) {
+                const available = draft.storyboard.scenes.map((s) => s.name).join(", ");
+                throw new Error(
+                  `update_storyboard: scene "${op.match}" not found. Available scenes: ${available || "(none)"}.`,
+                );
+              }
+              draft.storyboard.scenes[sceneIndex] = { ...draft.storyboard.scenes[sceneIndex], ...op.scene };
+              break;
+            }
+            case "insertAfter": {
+              const sceneToInsert = op.scene;
+              if (!sceneToInsert || !sceneToInsert.name) {
+                throw new Error("insertAfter action requires a scene with a name.");
+              }
+              if (op.after === null) {
+                // Insert at start
+                draft.storyboard.scenes.unshift(sceneToInsert as any);
+              } else {
+                const afterIndex = draft.storyboard.scenes.findIndex((s) => s.name === op.after);
+                if (afterIndex === -1) {
+                  const available = draft.storyboard.scenes.map((s) => s.name).join(", ");
+                  throw new Error(
+                    `insertAfter: scene "${op.after}" not found. Available scenes: ${available || "(none)"}.`,
+                  );
+                }
+                draft.storyboard.scenes.splice(afterIndex + 1, 0, sceneToInsert as any);
+              }
+              break;
+            }
+            case "remove": {
+              if (!op.match) {
+                throw new Error("remove action requires a match parameter (scene name).");
+              }
+              const removeIndex = draft.storyboard.scenes.findIndex((s) => s.name === op.match);
+              if (removeIndex === -1) {
+                const available = draft.storyboard.scenes.map((s) => s.name).join(", ");
+                throw new Error(
+                  `remove: scene "${op.match}" not found. Available scenes: ${available || "(none)"}.`,
+                );
+              }
+              draft.storyboard.scenes.splice(removeIndex, 1);
+              break;
+            }
+            case "reorder": {
+              if (!op.order) {
+                throw new Error("reorder action requires an order parameter (array of scene names).");
+              }
+              const currentNames = draft.storyboard.scenes.map((s) => s.name);
+              const orderSet = new Set(op.order);
+              const currentSet = new Set(currentNames);
+              
+              // Check if the sets match
+              if (orderSet.size !== currentSet.size || !op.order.every(n => currentSet.has(n)) || !currentNames.every(n => orderSet.has(n))) {
+                throw new Error(
+                  `reorder: the provided order [${op.order.join(", ")}] does not match the current scenes [${currentNames.join(", ")}].`,
+                );
+              }
+              
+              // Reorder scenes to match the order array
+              const newOrder = op.order.map(name => draft.storyboard.scenes.find(s => s.name === name)!);
+              draft.storyboard.scenes = newOrder;
+              break;
+            }
+          }
+        }
+      }
+
+      return draft;
+    });
+    return { ok: true };
+  },
+
+  async delete_storyboard() {
+    await sceneStore.update((draft) => {
+      draft.storyboard = undefined;
       return draft;
     });
     return { ok: true };

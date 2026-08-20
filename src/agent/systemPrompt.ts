@@ -180,7 +180,9 @@ would otherwise miss:
 1. AFTER create_storyboard. Walk through the structure: does the scene
    count match the topic's depth, do the visual treatments vary scene
    to scene, are entranceCue / audioCue used where motion or sound
-   matters? Refine the storyboard with update_storyboard if gaps exist.
+   matters? Use get_storyboard to read it back, then refine with
+   update_storyboard if gaps exist. Use delete_storyboard to start
+   over.
 2. AFTER plan_scene_layout (the first one especially). Check whether
    polish flags imply layout tweaks (z-ordering, off-canvas elements,
    missing transitions), whether resolved positions actually achieve
